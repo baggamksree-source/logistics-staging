@@ -31,13 +31,12 @@ ALL_SYSTEM_COLUMNS = COLUMNS + milestone_columns
 def download_raw_cloud_rows():
     try:
         cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
-        raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("")
+        raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("No")
         if not raw_df.empty:
             raw_df.columns = raw_df.columns.astype(str).str.strip()
-            
-            # TRACK SYSTEM INDEXING: Generate exact physical Google Sheet row IDs (Header row is 1, data starts at 2)
             raw_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
             
+            # Ensure every schema column is built out with safe fallbacks
             for c in ALL_SYSTEM_COLUMNS:
                 if c not in raw_df.columns: 
                     raw_df[c] = "No"
@@ -57,15 +56,21 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
 
 current_working_df = st.session_state.editable_ledger_df.copy()
 
+for col in ALL_SYSTEM_COLUMNS:
+    if col not in current_working_df.columns:
+        current_working_df[col] = "No"
+
 grid_configuration = {
-    "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True), # Lock index field visually
+    "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
     "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
     "Date": st.column_config.TextColumn("Tracking Date")
 }
 
 for m_col in milestone_columns:
-    series_data = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
-    current_working_df[m_col] = series_data.map({"YES": True, "NO": False}).fillna(False)
+    # Stable cell normalization routine to completely avoid string attribute crashes
+    raw_series = current_working_df[m_col].fillna("No").astype(str)
+    cleaned_series = raw_series.apply(lambda val: str(val).strip().upper())
+    current_working_df[m_col] = cleaned_series.map({"YES": True, "TRUE": True}).fillna(False)
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
 edited_data_output = st.data_editor(
@@ -90,7 +95,6 @@ if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_co
             dict_payload["Last_Updated_By"] = user_email
             dict_payload["Last_Modified_On"] = datetime.now().strftime("%Y-%m-%d %H:%M")
             
-            # Extract out the data payload alongside its physical Row ID index tag
             payload_ordered = {col: str(dict_payload.get(col, "")) for col in ["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS}
             try:
                 requests.post(WRITE_URL, data=json.dumps(payload_ordered))
