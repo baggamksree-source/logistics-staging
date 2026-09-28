@@ -17,7 +17,7 @@ READ_URL = st.secrets["sheet_read_url"]
 WRITE_URL = st.secrets["sheet_write_url"]
 user_email = st.session_state.get("user_identity", "unknown_user")
 
-# Pull the exact list of 12 milestones cleanly without broken file path imports
+# Complete tracking checklist array list definitions 
 milestone_columns = [
     "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
     "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
@@ -35,75 +35,77 @@ def download_raw_cloud_rows():
         raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("")
         if not raw_df.empty:
             raw_df.columns = raw_df.columns.astype(str).str.strip()
-            
-            # Auto-patch missing core columns or milestone tracking points
+            # Ensure every column from our schema exists in the data frame cleanly
             for c in ALL_SYSTEM_COLUMNS:
                 if c not in raw_df.columns: 
                     raw_df[c] = "No" if c in milestone_columns else ""
             return raw_df[ALL_SYSTEM_COLUMNS]
     except Exception as e:
         st.sidebar.error(f"Failed to fetch ledger rows: {e}")
-    return pd.DataFrame(columns=ALL_SYSTEM_COLUMNS)
+    
+    # Solid fallback builder: Creates clean empty structural tracking row grids if spreadsheet data is blank
+    blank_df = pd.DataFrame(columns=ALL_SYSTEM_COLUMNS)
+    return blank_df
 
-# Use session state caching to track inline modifications safely
+# Handle memory tracking states across frame sessions safely
 if "editable_ledger_df" not in st.session_state:
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
 
 if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
+    if "editable_ledger_df" in st.session_state:
+        del st.session_state.editable_ledger_df
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
     st.rerun()
 
-current_working_df = st.session_state.editable_ledger_df
+current_working_df = st.session_state.editable_ledger_df.copy()
 
-if current_working_df.empty:
-    st.info("No data cells available inside the master spreadsheet container grid currently.")
-else:
-    # --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
-    grid_configuration = {
-        "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
-        "Date": st.column_config.TextColumn("Tracking Date")
-    }
+# Ensure database columns exist safely prior to running column adjustments
+for col in ALL_SYSTEM_COLUMNS:
+    if col not in current_working_df.columns:
+        current_working_df[col] = "No" if col in milestone_columns else ""
+
+# --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
+grid_configuration = {
+    "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
+    "Date": st.column_config.TextColumn("Tracking Date")
+}
+
+# Convert text database formatting to pure Python boolean true/false checkboxes safely
+for m_col in milestone_columns:
+    current_working_df[m_col] = current_working_df[m_col].astype(str).str.strip().upper() == "YES"
+    grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
+
+# ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
+edited_data_output = st.data_editor(
+    current_working_df,
+    use_container_width=True,
+    hide_index=False,
+    num_rows="dynamic",
+    column_config=grid_configuration
+)
+
+st.markdown("---")
+st.subheader("💾 Database Commit Control Matrix")
+c_btn1, c_btn2 = st.columns(2)
+
+with c_btn1:
+    commit_execution_trigger = st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary")
     
-    # Transform all 12 document milestones into true clickable native checkboxes
+with c_btn2:
+    st.caption("Warning: Tapping Save forces your table modifications to overwrite old index matches across the core database network logs.")
+
+if commit_execution_trigger:
+    st.info("Broadcasting grid rows framework array down to Google Webapp Connector API...")
+    
+    # Process modifications output cleanly back into spreadsheet string variables
+    final_sync_df = edited_data_output.copy()
     for m_col in milestone_columns:
-        # Crash safeguard: If column is missing from the sheet data, create it as 'No' on the fly
-        if m_col not in current_working_df.columns:
-            current_working_df[m_col] = "No"
-            
-        # Convert text database values ("Yes" / "No") to Python Boolean values (True / False) for display
-        current_working_df[m_col] = current_working_df[m_col].astype(str).str.strip().upper() == "YES"
-        grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
-
-
-    # ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
-    edited_data_output = st.data_editor(
-        current_working_df,
-        use_container_width=True,
-        hide_index=False,
-        num_rows="dynamic",
-        column_config=grid_configuration
-    )
-
-    st.markdown("---")
-    st.subheader("💾 Database Commit Control Matrix")
-    c_btn1, c_btn2 = st.columns([1, 3])
+        final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
+        
+    success_rows_count = 0
     
-    with c_btn1:
-        commit_execution_trigger = st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary")
-        
-    with c_btn2:
-        st.caption("Warning: Tapping Save forces your table modifications to overwrite old index matches across the core database network logs.")
-
-    if commit_execution_trigger:
-        st.session_state.editable_ledger_df = edited_data_output
-        st.info("Broadcasting grid rows framework array down to Google Webapp Connector API...")
-        
-        # Convert Booleans back to spreadsheet text strings ("Yes" / "No") prior to network export
-        for m_col in milestone_columns:
-            edited_data_output[m_col] = edited_data_output[m_col].map({True: "Yes", False: "No"}).fillna("No")
-            
-        success_rows_count = 0
-        for index_row, data_row in edited_data_output.iterrows():
+    if not final_sync_df.empty:
+        for index_row, data_row in final_sync_df.iterrows():
             dict_payload = data_row.to_dict()
             dict_payload["Last_Updated_By"] = user_email
             dict_payload["Last_Modified_On"] = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -114,8 +116,9 @@ else:
                 success_rows_count += 1
             except:
                 pass
-                
-        st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified and mapped).")
-        st.cache_data.clear()
-        del st.session_state["editable_ledger_df"] # clear local window state memory to pull fresh updates
-        st.rerun()
+            
+    st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified and mapped).")
+    st.cache_data.clear()
+    if "editable_ledger_df" in st.session_state:
+        del st.session_state["editable_ledger_df"]
+    st.rerun()
