@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import COLUMNS
 
 st.set_page_config(page_title="Audit Trail Hub", layout="wide")
 
@@ -11,7 +10,7 @@ if not st.session_state.get("security_cleared", False):
     st.stop()
 
 st.title("🕵️‍♂️ Operational Audit Log Ledger")
-st.caption("Review historical user footprints, row creation sources, and live editing tracking trails across the platform.")
+st.caption("Review historical user footprints, row creation sources, and live editing tracking trails for active nominated files.")
 
 READ_URL = st.secrets["sheet_read_url"]
 
@@ -37,7 +36,7 @@ audit_master_df = download_audit_logs()
 if audit_master_df.empty:
     st.info("The operational audit log ledger contains no transaction history yet.")
 else:
-    # Filter down specifically to transaction trail columns
+    # Filter down specifically to core transaction trail columns
     display_cols = ["Booking_MBL", "HBL", "Customer", "Created_By", "Last_Updated_By", "Last_Modified_On"]
     refined_logs = audit_master_df[display_cols].copy()
     
@@ -85,6 +84,6 @@ else:
     st.download_button(
         label="📥 Download Certified Audit Logs to CSV",
         data=csv_data,
-        file_name=f"Operational_Audit_Log_{datetime.now().strftime('%Y%m%d')}.csv",
+        file_name=f"Nominated_Shipments_Audit_Log_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
