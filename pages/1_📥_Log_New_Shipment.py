@@ -16,13 +16,25 @@ st.caption("Log fresh active, nominated container files directly to the core log
 user_email = st.session_state.get("user_identity", "unknown_user")
 WRITE_URL = st.secrets["sheet_write_url"]
 
+# All 12 dynamic milestone headers exactly as defined in the master spreadsheet layout
+milestone_columns = [
+    "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
+    "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
+    "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
+    "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
+    "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
+    "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
+]
+
+ALL_SYSTEM_COLUMNS = COLUMNS + milestone_columns
+
 with st.form(key="isolated_form", clear_on_submit=True):
     st.subheader("📋 Nominated Shipment Information Matrix")
     c1, c2, c3, c_agent = st.columns(4)
     with c1: log_dt = st.date_input("Tracking File Date", date.today())
     with c2: cat = st.selectbox("Current Operational Phase", STAGES)
     with c3: cust = st.text_input("Customer Entity Title").strip()
-    with c_agent: agent = st.text_input("Assigned Agent Partner").strip() # Added Agent Field
+    with c_agent: agent = st.text_input("Assigned Agent Partner").strip()
 
     c4, c5, c6, c7 = st.columns(4)
     with c4: liner = st.text_input("Liner Carrier / Vessel").strip()
@@ -49,12 +61,12 @@ with st.form(key="isolated_form", clear_on_submit=True):
     save_btn = st.form_submit_button(label="🚀 Append File to Master Cloud Sheets Database")
 
 if save_btn and cust:
-    # Map all UI inputs securely to your spreadsheet keys
+    # Build complete foundational tracking payload layout keys mapping
     payload = {
         "Date": log_dt.strftime("%Y-%m-%d"), 
         "Category": cat.strip(), 
         "Customer": cust, 
-        "Agent": agent, # Correctly binding the dynamic Agent value
+        "Agent": agent, 
         "HBL": hbl, 
         "Liner": liner, 
         "Booking_MBL": mbl, 
@@ -78,21 +90,15 @@ if save_btn and cust:
         "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
-    milestone_columns = [
-        "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
-        "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
-        "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
-        "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
-        "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
-        "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
-    ]
+    # Initialize all 12 checkboxes to "No" (Pending) explicitly inside the sent data array
     for milestone_key in milestone_columns:
         payload[milestone_key] = "No"
         
-    ordered_payload = {col: payload.get(col, "") for col in COLUMNS + milestone_columns}
+    # Crucial Structure Fix: Order all 35 columns perfectly matching Row 1 of your spreadsheet
+    ordered_payload = {col: str(payload.get(col, "")) for col in ALL_SYSTEM_COLUMNS}
     
     try:
-        requests.post(WRITE_URL, data=json.dumps(ordered_payload))
-        st.success("✓ Nominated file dynamically saved to cloud masters matrix spreadsheet layout!")
+        response = requests.post(WRITE_URL, data=json.dumps(ordered_payload))
+        st.success("✓ Success! Nominated file dynamically saved to cloud masters matrix spreadsheet layout!")
     except Exception as err:
         st.error(f"Network error trying to contact Google server hook: {err}")
