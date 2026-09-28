@@ -7,7 +7,8 @@ from utils import COLUMNS, STAGES
 st.set_page_config(page_title="Entry Portal", layout="wide")
 
 if not st.session_state.get("security_cleared", False):
-    st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first."); st.stop()
+    st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first.")
+    st.stop()
 
 st.title("📥 Operational Entry Portal Grid")
 st.caption("Log fresh active, nominated container files directly to the core logging infrastructure.")
@@ -30,7 +31,7 @@ with st.form(key="isolated_form", clear_on_submit=True):
 
     st.markdown("---")
     st.subheader("📊 Financial Pipeline Indicators")
-    c8 = st.columns(1)[0]
+    c8 = st.columns(1)
     with c8: revenue = st.text_input("Revenue to be Billed (Numeric formatting only)").strip()
 
     st.markdown("---")
@@ -48,7 +49,6 @@ with st.form(key="isolated_form", clear_on_submit=True):
     save_btn = st.form_submit_button(label="🚀 Append File to Master Cloud Sheets Database")
 
 if save_btn and cust:
-    # Build clean payload containing only nominated tracking anchors
     payload = {
         "Date": log_dt.strftime("%Y-%m-%d"), "Category": cat.strip(), "Customer": cust, "Agent": "", 
         "HBL": hbl, "Liner": liner, "Booking_MBL": mbl, "Container": cont, "POL": pol, "POD": pod, 
@@ -58,17 +58,19 @@ if save_btn and cust:
         "Revenue_yet_to_be_Billed": "", "Created_By": user_email, "Last_Updated_By": user_email, "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
-    # Initialize all 12 document milestones as "No" automatically on creation
-    from utils import get_header_map # dynamic import safe block
-    try:
-        from pages.5_🚀_Deadline_Alert_Engine import MILESTONES
-        for milestone_key in MILESTONES.keys():
-            payload[milestone_key] = "No"
-    except:
-        # Fallback safeguard initialization if page 5 isn't fully compiled yet
-        pass
+    # Static fallback array lists to perfectly initialize tracking data fields safely
+    milestone_columns = [
+        "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
+        "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
+        "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
+        "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
+        "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
+        "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
+    ]
+    for milestone_key in milestone_columns:
+        payload[milestone_key] = "No"
         
-    ordered_payload = {col: payload.get(col, "") for col in COLUMNS}
+    ordered_payload = {col: payload.get(col, "") for col in COLUMNS + milestone_columns}
     
     try:
         requests.post(WRITE_URL, data=json.dumps(ordered_payload))
