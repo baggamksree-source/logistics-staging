@@ -1,0 +1,6 @@
+├── app.py                      (Main landing file)
+├── utils.py                    (Global configurations file)
+└── pages/                      (NEW DIRECTORY FOLDER)
+    ├── 1_📥_Log_New_Shipment.py
+    ├── 2_📊_Analytics_Dashboard.py
+    └── 3_✏️_Live_Data_Ledger.py
