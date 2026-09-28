@@ -13,14 +13,21 @@ READ_URL = st.secrets["sheet_read_url"]
 
 @st.cache_data(ttl=5)
 def pull_live_metrics_stream():
-    cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
-    raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("")
-    if not raw_df.empty:
-        raw_df.columns = raw_df.columns.astype(str).str.strip()
-        for col_name in COLUMNS:
-            if col_name not in raw_df.columns: raw_df[col_name] = ""
-        return raw_df[COLUMNS]
+    """
+    Downloads raw spreadsheet rows directly from your master cloud database.
+    """
+    try:
+        # Direct clean download request from the target URL key
+        raw_df = pd.read_csv(READ_URL, on_bad_lines='skip', dtype=str).fillna("")
+        if not raw_df.empty:
+            raw_df.columns = raw_df.columns.astype(str).str.strip()
+            for col_name in COLUMNS:
+                if col_name not in raw_df.columns: raw_df[col_name] = ""
+            return raw_df[COLUMNS]
+    except Exception as e:
+        st.sidebar.error(f"Failed to read live data: {e}")
     return pd.DataFrame(columns=COLUMNS)
+
 
 if st.sidebar.button("🔄 Clear Visual Cache Locks"):
     st.cache_data.clear()
