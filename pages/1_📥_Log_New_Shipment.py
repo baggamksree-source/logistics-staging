@@ -18,10 +18,11 @@ WRITE_URL = st.secrets["sheet_write_url"]
 
 with st.form(key="isolated_form", clear_on_submit=True):
     st.subheader("📋 Nominated Shipment Information Matrix")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c_agent = st.columns(4)
     with c1: log_dt = st.date_input("Tracking File Date", date.today())
     with c2: cat = st.selectbox("Current Operational Phase", STAGES)
     with c3: cust = st.text_input("Customer Entity Title").strip()
+    with c_agent: agent = st.text_input("Assigned Agent Partner").strip() # Added Agent Field
 
     c4, c5, c6, c7 = st.columns(4)
     with c4: liner = st.text_input("Liner Carrier / Vessel").strip()
@@ -40,7 +41,6 @@ with st.form(key="isolated_form", clear_on_submit=True):
     with c11: pod = st.text_input("POD (Port of Discharge)").strip()
     with c12: nxt = st.text_input("Next Scheduled Action").strip()
 
-    # --- UPGRADED LOGISTICS CALENDAR SELECTOR MATRIX ---
     c13, c14, c15 = st.columns(3)
     with c13: etd_so_dt = st.date_input("ETD Estimated Schedule (SO Date)", date.today())
     with c14: etd_atd_dt = st.date_input("ETD / ATD Verified Departure Target", date.today())
@@ -49,12 +49,12 @@ with st.form(key="isolated_form", clear_on_submit=True):
     save_btn = st.form_submit_button(label="🚀 Append File to Master Cloud Sheets Database")
 
 if save_btn and cust:
-    # Safely convert calendar dates into standard text strings for your spreadsheet
+    # Map all UI inputs securely to your spreadsheet keys
     payload = {
         "Date": log_dt.strftime("%Y-%m-%d"), 
         "Category": cat.strip(), 
         "Customer": cust, 
-        "Agent": "", 
+        "Agent": agent, # Correctly binding the dynamic Agent value
         "HBL": hbl, 
         "Liner": liner, 
         "Booking_MBL": mbl, 
@@ -78,7 +78,6 @@ if save_btn and cust:
         "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
-    # Static fallback array lists to perfectly initialize tracking data fields safely
     milestone_columns = [
         "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
         "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
