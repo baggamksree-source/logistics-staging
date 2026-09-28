@@ -98,7 +98,16 @@ if save_btn and cust:
     ordered_payload = {col: str(payload.get(col, "")) for col in ALL_SYSTEM_COLUMNS}
     
     try:
-        response = requests.post(WRITE_URL, data=json.dumps(ordered_payload))
-        st.success("✓ Success! Nominated file dynamically saved to cloud masters matrix spreadsheet layout!")
+        # Send raw JSON request safely over HTTPS
+        response = requests.post(WRITE_URL, data=json.dumps(ordered_payload), headers={"Content-Type": "application/json"})
+        
+        # --- NEW PIPELINE DIAGNOSTIC RADAR ---
+        if response.status_code == 200:
+            st.success("🚀 SUCCESS! Connected to Google server. Row has been permanently injected into your spreadsheet!")
+            st.balloons()
+        else:
+            st.error(f"❌ SERVER REJECTION ({response.status_code}): Google accepted the signal but blocked the write event.")
+            st.warning(f"Server response notes: {response.text}")
+            
     except Exception as err:
-        st.error(f"Network error trying to contact Google server hook: {err}")
+        st.error(f"📡 NETWORK BLOCKED: Your app could not connect to the Webhook URL. Details: {err}")
