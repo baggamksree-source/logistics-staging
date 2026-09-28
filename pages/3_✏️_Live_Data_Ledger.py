@@ -17,19 +17,15 @@ READ_URL = st.secrets["sheet_read_url"]
 WRITE_URL = st.secrets["sheet_write_url"]
 user_email = st.session_state.get("user_identity", "unknown_user")
 
-# Pull the exact list of 12 milestones to build checkbox configuration
-try:
-    from pages.5_🚀_Deadline_Alert_Engine import MILESTONES
-    milestone_columns = list(MILESTONES.keys())
-except:
-    milestone_columns = [
-        "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
-        "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
-        "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
-        "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
-        "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
-        "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
-    ]
+# Pull the exact list of 12 milestones cleanly without broken file path imports
+milestone_columns = [
+    "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
+    "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
+    "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
+    "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
+    "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
+    "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
+]
 
 ALL_SYSTEM_COLUMNS = COLUMNS + milestone_columns
 
