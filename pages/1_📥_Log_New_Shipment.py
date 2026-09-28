@@ -104,7 +104,6 @@ if save_btn and cust:
         # --- NEW PIPELINE DIAGNOSTIC RADAR ---
         if response.status_code == 200:
             st.success("🚀 SUCCESS! Connected to Google server. Row has been permanently injected into your spreadsheet!")
-            st.balloons()
         else:
             st.error(f"❌ SERVER REJECTION ({response.status_code}): Google accepted the signal but blocked the write event.")
             st.warning(f"Server response notes: {response.text}")
