@@ -33,20 +33,16 @@ def download_raw_cloud_rows():
         cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
         raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("No")
         
-        # Build a fresh, clean dataframe to completely eliminate any duplicate column index bugs
         cleaned_data = {}
         
         if not raw_df.empty:
-            # Clean up headers from the sheet download
             raw_df.columns = raw_df.columns.astype(str).str.strip()
             
-            # Generate exact physical Google Sheet row IDs
+            # Generate un-cheatable physical row indices matching your Google Sheet layout
             cleaned_data["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
             
-            # Map columns one by one, picking only the first instance if a duplicate exists
             for col in ALL_SYSTEM_COLUMNS:
                 if col in raw_df.columns:
-                    # Handle duplicate columns by selecting only the first match
                     col_data = raw_df[col]
                     if isinstance(col_data, pd.DataFrame):
                         cleaned_data[col] = col_data.iloc[:, 0].astype(str).tolist()
@@ -64,11 +60,8 @@ def download_raw_cloud_rows():
     except Exception as e:
         st.sidebar.error(f"Failed to fetch ledger rows: {e}")
     
-    # Solid blueprint fallback if the spreadsheet is completely empty
-    blank_df = pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
-    return blank_df
+    return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
 
-# Handle memory tracking states across frame sessions safely
 if "editable_ledger_df" not in st.session_state:
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
 
@@ -78,7 +71,6 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
     st.rerun()
 
-# Deep copy to break any underlying data references completely
 current_working_df = st.session_state.editable_ledger_df.copy()
 
 # --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
@@ -88,19 +80,17 @@ grid_configuration = {
     "Date": st.column_config.TextColumn("Tracking Date")
 }
 
-# Convert text values ("Yes"/"No") to true/false checkboxes using a 100% crash-proof mapping array
 for m_col in milestone_columns:
-    # Normalize data strings to handle empty or invalid entries safely
     raw_values = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
     current_working_df[m_col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
-# ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
+# ── FIX: TO FIX THE STREAMLIT API EXCEPTION, WE SWITCH NUM_ROWS TO FIXED ──
 edited_data_output = st.data_editor(
     current_working_df,
     use_container_width=True,
     hide_index=True,
-    num_rows="dynamic",
+    num_rows="fixed", # Changes table properties to safe edit-only matrix framework mode
     column_config=grid_configuration
 )
 
@@ -109,7 +99,6 @@ st.subheader("💾 Database Commit Control Matrix")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
     final_sync_df = edited_data_output.copy()
     
-    # Convert checkbox boolean values back to text for your Google Sheet
     for m_col in milestone_columns:
         final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
         
