@@ -9,15 +9,12 @@ if not st.session_state.get("security_cleared", False):
     st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first."); st.stop()
 
 st.title("📊 Volume Indicators & Financial Metric Analytics")
+st.caption("Performance dashboards tracking live container logs and active financial cargo pipelines.")
 READ_URL = st.secrets["sheet_read_url"]
 
 @st.cache_data(ttl=5)
 def pull_live_metrics_stream():
-    """
-    Downloads raw spreadsheet rows directly from your master cloud database.
-    """
     try:
-        # Direct clean download request from the target URL key
         raw_df = pd.read_csv(READ_URL, on_bad_lines='skip', dtype=str).fillna("")
         if not raw_df.empty:
             raw_df.columns = raw_df.columns.astype(str).str.strip()
@@ -27,7 +24,6 @@ def pull_live_metrics_stream():
     except Exception as e:
         st.sidebar.error(f"Failed to read live data: {e}")
     return pd.DataFrame(columns=COLUMNS)
-
 
 if st.sidebar.button("🔄 Clear Visual Cache Locks"):
     st.cache_data.clear()
@@ -41,21 +37,19 @@ else:
     wk_df = master_df[master_df['Parsed_Date'] >= (datetime.today() - pd.Timedelta(days=7))]
     mo_df = master_df[master_df['Parsed_Date'] >= (datetime.today() - pd.Timedelta(days=30))]
     
-    num_rfqs = len(wk_df[(wk_df["Is_RFQ"].astype(str).str.strip() == "Yes") | (wk_df["Category"].astype(str).str.strip() == "Active RFQ")])
-    actual_shipments = len(wk_df[(wk_df["Is_RFQ"].astype(str).str.strip() != "Yes") & (wk_df["Category"].astype(str).str.strip() != "Active RFQ")])
-    num_deals = len(wk_df[wk_df["Deal_Finalized"].astype(str).str.strip() == "Yes"])
+    # Clean calculations counting 100% actual active shipments
+    actual_shipments_week = len(wk_df)
+    actual_shipments_month = len(mo_df)
     
     def calculate_rev(dataframe_target):
         return pd.to_numeric(dataframe_target['Revenue_to_be_Billed'].astype(str).str.replace(r'[\$,]', '', regex=True), errors='coerce').fillna(0).sum()
 
-    st.markdown("### 📈 Weekly Performance Status Overview")
-    mc1, mc2, mc3 = st.columns(3)
+    st.markdown("### 📦 Active Shipments Volume Overview")
+    mc1, mc2 = st.columns(2)
     with mc1:
-        st.markdown(f"<div style='background-color:#e8f4fd;padding:20px;border-radius:10px;border-left:6px solid #2196f3;'><h4 style='color:#0d47a1;margin:0;'>📦 Active Shipments Logged</h4><h2 style='color:#0d47a1;margin:10px 0 0 0;'>{actual_shipments} Lines</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background-color:#e8f4fd;padding:20px;border-radius:10px;border-left:6px solid #2196f3;'><h4 style='color:#0d47a1;margin:0;'>📦 Active Shipments Logged (Weekly)</h4><h2 style='color:#0d47a1;margin:10px 0 0 0;'>{actual_shipments_week} Lines</h2></div>", unsafe_allow_html=True)
     with mc2:
-        st.markdown(f"<div style='background-color:#fff8e1;padding:20px;border-radius:10px;border-left:6px solid #ffb300;'><h4 style='color:#5d4037;margin:0;'>💬 Price Enquiries (RFQs)</h4><h2 style='color:#5d4037;margin:10px 0 0 0;'>{num_rfqs} Units</h2></div>", unsafe_allow_html=True)
-    with mc3:
-        st.markdown(f"<div style='background-color:#e8f5e9;padding:20px;border-radius:10px;border-left:6px solid #4caf50;'><h4 style='color:#1b5e20;margin:0;'>🤝 Closed/Finalized Deals</h4><h2 style='color:#1b5e20;margin:10px 0 0 0;'>{num_deals} Rows</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background-color:#f1f8e9;padding:20px;border-radius:10px;border-left:6px solid #7cb342;'><h4 style='color:#33691e;margin:0;'>🚢 Active Shipments Logged (Monthly)</h4><h2 style='color:#33691e;margin:10px 0 0 0;'>{actual_shipments_month} Lines</h2></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("### 💰 Financial Pipeline Invoicing Summary")
