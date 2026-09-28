@@ -80,17 +80,24 @@ grid_configuration = {
     "Date": st.column_config.TextColumn("Tracking Date")
 }
 
-for m_col in milestone_columns:
-    raw_values = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
-    current_working_df[m_col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
-    grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
+# Force structural type safety conversion loop across all 35 tracked headers
+for col in ALL_SYSTEM_COLUMNS:
+    if col in milestone_columns:
+        # Convert values to strict clean Python booleans to satisfy st.data_editor restrictions
+        raw_values = current_working_df[col].fillna("No").astype(str).str.strip().str.upper()
+        current_working_df[col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
+        grid_configuration[col] = st.column_config.CheckboxColumn(col, default=False)
+    else:
+        # Ensure tracking values are treated as pure string text cells
+        current_working_df[col] = current_working_df[col].fillna("").astype(str)
+        grid_configuration[col] = st.column_config.TextColumn(col)
 
-# ── FIX: TO FIX THE STREAMLIT API EXCEPTION, WE SWITCH NUM_ROWS TO FIXED ──
+# ── ENFORCED SYSTEM RESET: CONVERT TRANSIT AND TEXT FIELDS EXPLICITLY TO PREVENT TYPE ERRORS ──
 edited_data_output = st.data_editor(
     current_working_df,
     use_container_width=True,
     hide_index=True,
-    num_rows="fixed", # Changes table properties to safe edit-only matrix framework mode
+    num_rows="fixed", 
     column_config=grid_configuration
 )
 
@@ -99,6 +106,7 @@ st.subheader("💾 Database Commit Control Matrix")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
     final_sync_df = edited_data_output.copy()
     
+    # Map checkbox boolean values safely back to tracking text strings for the spreadsheet update
     for m_col in milestone_columns:
         final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
         
