@@ -18,14 +18,20 @@ WRITE_URL = st.secrets["sheet_write_url"]
 user_email = st.session_state.get("user_identity", "unknown_user")
 
 def download_raw_cloud_rows():
-    cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
-    raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("")
-    if not raw_df.empty:
-        raw_df.columns = raw_df.columns.astype(str).str.strip()
-        for c in COLUMNS:
-            if c not in raw_df.columns: raw_df[c] = ""
-        return raw_df[COLUMNS]
+    """
+    Downloads clean data matrix files directly from your master cloud database.
+    """
+    try:
+        raw_df = pd.read_csv(READ_URL, on_bad_lines='skip', dtype=str).fillna("")
+        if not raw_df.empty:
+            raw_df.columns = raw_df.columns.astype(str).str.strip()
+            for c in COLUMNS:
+                if c not in raw_df.columns: raw_df[c] = ""
+            return raw_df[COLUMNS]
+    except Exception as e:
+        st.sidebar.error(f"Failed to fetch ledger rows: {e}")
     return pd.DataFrame(columns=COLUMNS)
+
 
 # Use session state caching to track inline modifications safely
 if "editable_ledger_df" not in st.session_state:
