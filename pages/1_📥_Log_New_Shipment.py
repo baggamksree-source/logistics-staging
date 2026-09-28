@@ -31,7 +31,6 @@ with st.form(key="isolated_form", clear_on_submit=True):
 
     st.markdown("---")
     st.subheader("📊 Financial Pipeline Indicators")
-    c8 = st.columns(1)
     with c8: revenue = st.text_input("Revenue to be Billed (Numeric formatting only)").strip()
 
     st.markdown("---")
