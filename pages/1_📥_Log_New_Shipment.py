@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, date
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Entry Portal", layout="wide")
@@ -11,7 +11,7 @@ if not st.session_state.get("security_cleared", False):
     st.stop()
 
 st.title("📥 Operational Entry Portal Grid")
-st.caption("Log fresh active, nominated container files directly to the core logging infrastructure.")
+st.caption("Log fresh active, nominated container files directly to the core logging infrastructure using precise calendar dates.")
 
 user_email = st.session_state.get("user_identity", "unknown_user")
 WRITE_URL = st.secrets["sheet_write_url"]
@@ -19,7 +19,7 @@ WRITE_URL = st.secrets["sheet_write_url"]
 with st.form(key="isolated_form", clear_on_submit=True):
     st.subheader("📋 Nominated Shipment Information Matrix")
     c1, c2, c3 = st.columns(3)
-    with c1: log_dt = st.date_input("Tracking File Date", datetime.today())
+    with c1: log_dt = st.date_input("Tracking File Date", date.today())
     with c2: cat = st.selectbox("Current Operational Phase", STAGES)
     with c3: cust = st.text_input("Customer Entity Title").strip()
 
@@ -40,21 +40,42 @@ with st.form(key="isolated_form", clear_on_submit=True):
     with c11: pod = st.text_input("POD (Port of Discharge)").strip()
     with c12: nxt = st.text_input("Next Scheduled Action").strip()
 
+    # --- UPGRADED LOGISTICS CALENDAR SELECTOR MATRIX ---
     c13, c14, c15 = st.columns(3)
-    with c13: etd_so = st.text_input("ETD Estimated Schedule").strip()
-    with c14: etd_atd = st.text_input("ETD/ATD Verified Target").strip()
-    with c15: eta_ata = st.text_input("ETA/ATA Status Matrix").strip()
+    with c13: etd_so_dt = st.date_input("ETD Estimated Schedule (SO Date)", date.today())
+    with c14: etd_atd_dt = st.date_input("ETD / ATD Verified Departure Target", date.today())
+    with c15: eta_ata_dt = st.date_input("ETA / ATA Destination Arrival Status", date.today())
 
     save_btn = st.form_submit_button(label="🚀 Append File to Master Cloud Sheets Database")
 
 if save_btn and cust:
+    # Safely convert calendar dates into standard text strings for your spreadsheet
     payload = {
-        "Date": log_dt.strftime("%Y-%m-%d"), "Category": cat.strip(), "Customer": cust, "Agent": "", 
-        "HBL": hbl, "Liner": liner, "Booking_MBL": mbl, "Container": cont, "POL": pol, "POD": pod, 
-        "ETD_as_per_SO": etd_so, "ETD_ATD": etd_atd, "ETA_ATA": eta_ata, "Follow_up_remarks": "", 
-        "Next_Follow_up": nxt, "HBL_Remarks": "", "CFS_Nomination_De_Stuffing": "", "FC": "",
-        "Revenue_to_be_Billed": revenue, "Is_RFQ": "No", "Deal_Finalized": "Yes",
-        "Revenue_yet_to_be_Billed": "", "Created_By": user_email, "Last_Updated_By": user_email, "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
+        "Date": log_dt.strftime("%Y-%m-%d"), 
+        "Category": cat.strip(), 
+        "Customer": cust, 
+        "Agent": "", 
+        "HBL": hbl, 
+        "Liner": liner, 
+        "Booking_MBL": mbl, 
+        "Container": cont, 
+        "POL": pol, 
+        "POD": pod, 
+        "ETD_as_per_SO": etd_so_dt.strftime("%Y-%m-%d"), 
+        "ETD_ATD": etd_atd_dt.strftime("%Y-%m-%d"), 
+        "ETA_ATA": eta_ata_dt.strftime("%Y-%m-%d"), 
+        "Follow_up_remarks": "", 
+        "Next_Follow_up": nxt, 
+        "HBL_Remarks": "", 
+        "CFS_Nomination_De_Stuffing": "", 
+        "FC": "",
+        "Revenue_to_be_Billed": revenue, 
+        "Is_RFQ": "No", 
+        "Deal_Finalized": "Yes",
+        "Revenue_yet_to_be_Billed": "", 
+        "Created_By": user_email, 
+        "Last_Updated_By": user_email, 
+        "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
     # Static fallback array lists to perfectly initialize tracking data fields safely
