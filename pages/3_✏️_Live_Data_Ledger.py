@@ -66,9 +66,14 @@ else:
     
     # Transform all 12 document milestones into true clickable native checkboxes
     for m_col in milestone_columns:
+        # Crash safeguard: If column is missing from the sheet data, create it as 'No' on the fly
+        if m_col not in current_working_df.columns:
+            current_working_df[m_col] = "No"
+            
         # Convert text database values ("Yes" / "No") to Python Boolean values (True / False) for display
         current_working_df[m_col] = current_working_df[m_col].astype(str).str.strip().upper() == "YES"
         grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
+
 
     # ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
     edited_data_output = st.data_editor(
