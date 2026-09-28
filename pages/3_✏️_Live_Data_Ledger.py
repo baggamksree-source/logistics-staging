@@ -36,15 +36,19 @@ def download_raw_cloud_rows():
             raw_df.columns = raw_df.columns.astype(str).str.strip()
             raw_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
             
-            # Ensure every schema column is built out with safe fallbacks
+            # Ensure every column from our schema exists in the data frame cleanly
             for c in ALL_SYSTEM_COLUMNS:
                 if c not in raw_df.columns: 
                     raw_df[c] = "No"
             return raw_df[["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS]
     except Exception as e:
         st.sidebar.error(f"Failed to fetch ledger rows: {e}")
-    return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
+    
+    # Solid fallback builder: Creates clean empty structural tracking row grids if spreadsheet data is blank
+    blank_df = pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
+    return blank_df
 
+# Handle memory tracking states across frame sessions safely
 if "editable_ledger_df" not in st.session_state:
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
 
@@ -54,25 +58,33 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
     st.rerun()
 
+# Deep copy to break any underlying Pandas data references completely
 current_working_df = st.session_state.editable_ledger_df.copy()
 
+# Ensure database columns exist safely prior to running column adjustments using explicit indexing
 for col in ALL_SYSTEM_COLUMNS:
     if col not in current_working_df.columns:
         current_working_df[col] = "No"
 
+# --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
 grid_configuration = {
     "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
     "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
     "Date": st.column_config.TextColumn("Tracking Date")
 }
 
+# Convert text database formatting to pure Python boolean true/false checkboxes safely
 for m_col in milestone_columns:
-    # Stable cell normalization routine to completely avoid string attribute crashes
+    # CRASH SAFEGUARD: If the milestone column is somehow missing, add it back instantly
+    if m_col not in current_working_df.columns:
+        current_working_df[m_col] = "No"
+        
     raw_series = current_working_df[m_col].fillna("No").astype(str)
     cleaned_series = raw_series.apply(lambda val: str(val).strip().upper())
     current_working_df[m_col] = cleaned_series.map({"YES": True, "TRUE": True}).fillna(False)
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
+# ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
 edited_data_output = st.data_editor(
     current_working_df,
     use_container_width=True,
