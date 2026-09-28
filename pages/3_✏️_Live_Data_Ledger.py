@@ -8,7 +8,8 @@ from utils import COLUMNS, STAGES
 st.set_page_config(page_title="Ledger Interface", layout="wide")
 
 if not st.session_state.get("security_cleared", False):
-    st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first."); st.stop()
+    st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first.")
+    st.stop()
 
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Click individual checkboxes directly inside the data grid below to toggle milestone statuses instantly, then click save.")
@@ -38,7 +39,7 @@ def download_raw_cloud_rows():
             # Ensure every column from our schema exists in the data frame cleanly
             for c in ALL_SYSTEM_COLUMNS:
                 if c not in raw_df.columns: 
-                    raw_df[c] = "No" if c in milestone_columns else ""
+                    raw_df[c] = "No"
             return raw_df[ALL_SYSTEM_COLUMNS]
     except Exception as e:
         st.sidebar.error(f"Failed to fetch ledger rows: {e}")
@@ -57,12 +58,13 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
     st.rerun()
 
+# Deep copy to break any underlying Pandas data references completely
 current_working_df = st.session_state.editable_ledger_df.copy()
 
-# Ensure database columns exist safely prior to running column adjustments
+# Ensure database columns exist safely prior to running column adjustments using explicit indexing
 for col in ALL_SYSTEM_COLUMNS:
     if col not in current_working_df.columns:
-        current_working_df[col] = "No" if col in milestone_columns else ""
+        current_working_df[col] = "No"
 
 # --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
 grid_configuration = {
@@ -72,7 +74,9 @@ grid_configuration = {
 
 # Convert text database formatting to pure Python boolean true/false checkboxes safely
 for m_col in milestone_columns:
-    current_working_df[m_col] = current_working_df[m_col].astype(str).str.strip().upper() == "YES"
+    # Safe structural transformation using data series mapping
+    series_data = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
+    current_working_df[m_col] = series_data.map({"YES": True, "NO": False}).fillna(False)
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
 # ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
