@@ -32,19 +32,39 @@ def download_raw_cloud_rows():
     try:
         cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
         raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("No")
+        
+        # Build a fresh, clean dataframe to completely eliminate any duplicate column index bugs
+        cleaned_data = {}
+        
         if not raw_df.empty:
+            # Clean up headers from the sheet download
             raw_df.columns = raw_df.columns.astype(str).str.strip()
-            raw_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
             
-            # Ensure every column from our schema exists in the data frame cleanly
-            for c in ALL_SYSTEM_COLUMNS:
-                if c not in raw_df.columns: 
-                    raw_df[c] = "No"
-            return raw_df[["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS]
+            # Generate exact physical Google Sheet row IDs
+            cleaned_data["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
+            
+            # Map columns one by one, picking only the first instance if a duplicate exists
+            for col in ALL_SYSTEM_COLUMNS:
+                if col in raw_df.columns:
+                    # Handle duplicate columns by selecting only the first match
+                    col_data = raw_df[col]
+                    if isinstance(col_data, pd.DataFrame):
+                        cleaned_data[col] = col_data.iloc[:, 0].astype(str).tolist()
+                    else:
+                        cleaned_data[col] = col_data.astype(str).tolist()
+                else:
+                    cleaned_data[col] = ["No"] * len(raw_df)
+        else:
+            cleaned_data["Spreadsheet_Row_ID"] = []
+            for col in ALL_SYSTEM_COLUMNS:
+                cleaned_data[col] = []
+                
+        return pd.DataFrame(cleaned_data)
+        
     except Exception as e:
         st.sidebar.error(f"Failed to fetch ledger rows: {e}")
     
-    # Solid fallback builder: Creates clean empty structural tracking row grids if spreadsheet data is blank
+    # Solid blueprint fallback if the spreadsheet is completely empty
     blank_df = pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
     return blank_df
 
@@ -58,13 +78,8 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = download_raw_cloud_rows()
     st.rerun()
 
-# Deep copy to break any underlying Pandas data references completely
+# Deep copy to break any underlying data references completely
 current_working_df = st.session_state.editable_ledger_df.copy()
-
-# Ensure database columns exist safely prior to running column adjustments using explicit indexing
-for col in ALL_SYSTEM_COLUMNS:
-    if col not in current_working_df.columns:
-        current_working_df[col] = "No"
 
 # --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
 grid_configuration = {
@@ -73,15 +88,11 @@ grid_configuration = {
     "Date": st.column_config.TextColumn("Tracking Date")
 }
 
-# Convert text database formatting to pure Python boolean true/false checkboxes safely
+# Convert text values ("Yes"/"No") to true/false checkboxes using a 100% crash-proof mapping array
 for m_col in milestone_columns:
-    # CRASH SAFEGUARD: If the milestone column is somehow missing, add it back instantly
-    if m_col not in current_working_df.columns:
-        current_working_df[m_col] = "No"
-        
-    raw_series = current_working_df[m_col].fillna("No").astype(str)
-    cleaned_series = raw_series.apply(lambda val: str(val).strip().upper())
-    current_working_df[m_col] = cleaned_series.map({"YES": True, "TRUE": True}).fillna(False)
+    # Normalize data strings to handle empty or invalid entries safely
+    raw_values = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
+    current_working_df[m_col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
 # ── ADVANCED INTERACTIVE DATA MATRIX GRID VIEW ──
@@ -97,6 +108,8 @@ st.markdown("---")
 st.subheader("💾 Database Commit Control Matrix")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
     final_sync_df = edited_data_output.copy()
+    
+    # Convert checkbox boolean values back to text for your Google Sheet
     for m_col in milestone_columns:
         final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
         
