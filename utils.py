@@ -2,7 +2,7 @@
 # GLOBAL CORE SCHEMAS & CONFIGURATION LOGISTICS PLATFORM MATRIX
 # ==============================================================================
 
-# Ironclad tracking headers matching row 1 of your master sheet layout perfectly
+# 35 structural tracking headers matching row 1 of your master sheet layout exactly
 COLUMNS = [
     "Date", "Category", "Customer", "Agent", "HBL", "Liner", "Booking_MBL", 
     "Container", "POL", "POD", "ETD_as_per_SO", "ETD_ATD", "ETA_ATA", 
@@ -17,7 +17,7 @@ COLUMNS = [
     "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
 ]
 
-# Trimmed stages starting strictly from verified cargo nomination
+# Trimmed operational phase stages starting strictly from cargo nomination
 STAGES = [
     "Yet to sail",
     "On water",
