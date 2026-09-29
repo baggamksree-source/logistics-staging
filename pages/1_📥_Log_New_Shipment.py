@@ -14,7 +14,7 @@ st.title("📥 Operational Entry Portal Grid")
 st.caption("Log fresh nominated container files. Repetitive fields autocomplete automatically based on historical rows data.")
 
 # ── INSERT YOUR NEW COPIED OFFICE ID DEPLOYMENT LINK HERE ──
-PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbwqaczXt8ga-cHBsUdMT1dD5h3e4WlhGuDGX2LKmIrSqqfLsnkS9MiSiiItiHUBNDFS8g/exec"
+PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbxP9HmhKhRW6X6VAEOI9IWp9bc5DY8RbfqAMTYLIN3wGX-EKNnuup-kNucPZ-jtL7sTSg/exec"
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
