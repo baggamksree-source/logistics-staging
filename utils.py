@@ -2,44 +2,26 @@
 # GLOBAL CORE SCHEMAS & CONFIGURATION LOGISTICS PLATFORM MATRIX
 # ==============================================================================
 
-# 35 structural tracking headers matching row 1 of your master sheet layout exactly
 COLUMNS = [
     "Date", "Category", "Customer", "Agent", "HBL", "Liner", "Booking_MBL", 
     "Container", "POL", "POD", "ETD_as_per_SO", "ETD_ATD", "ETA_ATA", 
     "Follow_up_remarks", "Next_Follow_up", "HBL_Remarks", 
     "CFS_Nomination_De_Stuffing", "FC", "Revenue_to_be_Billed", 
     "Revenue_yet_to_be_Billed", "Created_By", "Last_Updated_By", "Last_Modified_On",
-    "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
-    "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
-    "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
-    "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
-    "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
-    "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
+    "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
+    "BL Draft Checking & Approval", "BL Approval from Shipper and Consignee",
+    "Follow-up of Container Back to Terminal", "Vessel ETD+ Tracking",
+    "Enquiry of Pre-alert Docs + D/N on ETD + SOB Confirmation",
+    "On Water ETA Tracking", "Freight Certificate", "Remittance to Overseas Agent",
+    "IGM File + CFS Nomination", "Local Charges Invoice Checking and Payment",
+    "DO Procurement", "Cost Sheet Preparation", "Customer Invoice Prep + Submission to Client"
 ]
 
-# Trimmed operational phase stages starting strictly from cargo nomination
 STAGES = [
+    "Nominated",
     "Yet to sail",
     "On water",
     "Reached shore yet to release",
     "Released",
     "Empty container returned"
 ]
-
-# Core post-nomination milestones used by your daily cloud email scanner
-DOCS = {
-    "OBL_Status": "Original Bill of Lading (OBL)",
-    "DO_Status": "Delivery Order (DO)",
-    "Customs_Cleared": "Customs Clearance Status",
-    "Billing_Done": "Invoicing & Financial Settlement"
-}
-
-def get_header_map():
-    return {
-        "date": "Date", "stage": "Category", "category": "Category", 
-        "customer": "Customer", "client": "Customer", "hbl": "HBL", 
-        "liner": "Liner", "shipping line": "Liner", "mbl": "Booking_MBL", 
-        "booking": "Booking_MBL", "container": "Container", "pol": "POL", 
-        "pod": "POD", "etd": "ETD_as_per_SO", "eta": "ETA_ATA", 
-        "revenue": "Revenue_to_be_Billed"
-    }
