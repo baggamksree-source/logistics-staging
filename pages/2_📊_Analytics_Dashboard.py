@@ -10,7 +10,7 @@ if not st.session_state.get("security_cleared", False):
 
 st.title("📊 Volume Indicators & Financial Metric Analytics")
 st.caption("Performance dashboards tracking live container logs and active financial cargo pipelines.")
-READ_URL = st.secrets["sheet_read_url"]
+READ_URL = st.secrets["https://script.google.com/macros/s/AKfycbxP9HmhKhRW6X6VAEOI9IWp9bc5DY8RbfqAMTYLIN3wGX-EKNnuup-kNucPZ-jtL7sTSg/exec"]
 
 @st.cache_data(ttl=5)
 def pull_live_metrics_stream():
