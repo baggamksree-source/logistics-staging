@@ -10,7 +10,7 @@ if not st.session_state.get("security_cleared", False):
 
 st.title("📊 Volume Indicators & Financial Metric Analytics")
 st.caption("Performance dashboards tracking live container logs and active financial cargo pipelines.")
-READ_URL = st.secrets["https://docs.google.com/spreadsheets/d/13bThlhcc1w1irKTFzTqOhvr90pHs4C6knB10etR6nho/export?format=csv"]
+READ_URL = st.secrets["sheet_read_url"]
 
 @st.cache_data(ttl=5)
 def pull_live_metrics_stream():
