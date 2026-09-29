@@ -14,7 +14,10 @@ st.title("📥 Operational Entry Portal Grid")
 st.caption("Log fresh active, nominated container files directly to the core logging infrastructure using precise calendar dates.")
 
 user_email = st.session_state.get("user_identity", "unknown_user")
-WRITE_URL = st.secrets["sheet_write_url"]
+
+# ── HARDCODED PRODUCTION LINK BYPASS: INSULATES TRAFFIC FROM FIREWALL CACHE DISCONNECTS ──
+# TODO: REPLACE THE LINK BELOW WITH YOUR EXACT COPIED CORPORATE OFFICE WEB APP URL
+PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbwJmHnEkuxfALeFNQI7_eM3YWw8G30cdUBQ2mG4FatDd8gLEfpJCExqCDwWcpFgWbUVjg/exec"
 
 # All 12 dynamic milestone headers exactly as defined in the master spreadsheet layout
 milestone_columns = [
@@ -98,10 +101,9 @@ if save_btn and cust:
     ordered_payload = {col: str(payload.get(col, "")) for col in ALL_SYSTEM_COLUMNS}
     
     try:
-        # Send raw JSON request safely over HTTPS
-        response = requests.post(WRITE_URL, data=json.dumps(ordered_payload), headers={"Content-Type": "application/json"})
+        # Direct forced HTTPS post mapping bypass
+        response = requests.post(PRODUCTION_URL, data=json.dumps(ordered_payload), headers={"Content-Type": "application/json"})
         
-        # --- NEW PIPELINE DIAGNOSTIC RADAR ---
         if response.status_code == 200:
             st.success("🚀 SUCCESS! Connected to Google server. Row has been permanently injected into your spreadsheet!")
         else:
