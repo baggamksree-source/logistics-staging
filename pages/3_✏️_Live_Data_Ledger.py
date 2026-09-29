@@ -77,27 +77,34 @@ grid_configuration = {
 for m_col in milestone_columns:
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
-def render_interactive_grid(df_dataset):
+# --- FIX: INJECT AN EXPLICIT KEY SUFFIX FOR EACH ISOLATED DATA TAB TOOL ---
+def render_interactive_grid(df_dataset, dynamic_key_suffix):
     styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
     return st.data_editor(
-        styled_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration, key=f"grid_{df_dataset.shape}_{datetime.now().second}"
+        styled_df, 
+        use_container_width=True, 
+        hide_index=True, 
+        num_rows="fixed", 
+        column_config=grid_configuration, 
+        key=f"data_ledger_grid_{dynamic_key_suffix}"
     )
 
 with tab_master:
     st.markdown("🟢 **Master Consolidated Queue Line**")
-    edited_output = render_interactive_grid(raw_working_data)
+    edited_output = render_interactive_grid(raw_working_data, "master_view")
 
 with tab_yts:
     st.markdown("⛵ **Isolated View: Unshipped Freight Bookings**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "Yet to sail"])
+    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "Yet to sail"], "yet_to_sail_view")
 
 with tab_ow:
     st.markdown("🌊 **Isolated View: Active High Sea Transits**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "On water"])
+    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "On water"], "on_water_view")
 
 with tab_rs:
     st.markdown("⚓ **Isolated View: Arrived / Cargo Delivered Records**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"].isin(["Reached shore yet to release", "Released", "Empty container returned"])])
+    render_interactive_grid(raw_working_data[raw_working_data["Category"].isin(["Reached shore yet to release", "Released", "Empty container returned"])], "shore_released_view")
+
 
 st.markdown("---")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
