@@ -48,6 +48,12 @@ with st.form(key="isolated_form", clear_on_submit=True):
     with c14: etd_atd_dt = st.date_input("ETD / ATD Actual Date", date.today())
     with c15: eta_ata_dt = st.date_input("ETA / ATA Target Date", date.today())
 
+    st.markdown("---")
+    st.subheader("💰 Financial Pipeline Parameters")
+    rev_col1, rev_col2 = st.columns(2)
+    with rev_col1: revenue = st.text_input("Revenue to be Billed (Numeric formatting only)").strip()
+    with rev_col2: yet_to_bill = st.text_input("Revenue Yet to be Billed").strip()
+
     save_btn = st.form_submit_button(label="🚀 Append File to Master Cloud Sheets Database")
 
 if save_btn and cust:
@@ -55,7 +61,7 @@ if save_btn and cust:
         "Date": log_dt.strftime("%Y-%m-%d"), "Category": cat, "Customer": cust, "Agent": agent,
         "HBL": hbl, "Liner": liner, "Booking_MBL": mbl, "Container": cont, "POL": pol, "POD": pod,
         "ETD_as_per_SO": etd_so_dt.strftime("%Y-%m-%d"), "ETD_ATD": etd_atd_dt.strftime("%Y-%m-%d"),
-        "ETA_ATA": eta_ata_dt.strftime("%Y-%m-%d"), "Created_By": "ops_team", "Last_Updated_By": "ops_team",
+        "ETA_ATA": eta_ata_dt.strftime("%Y-%m-%d"),"Revenue_to_be_Billed": revenue, "Created_By": "ops_team", "Last_Updated_By": "ops_team",
         "Last_Modified_On": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
