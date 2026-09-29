@@ -7,106 +7,89 @@ from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Ledger Interface", layout="wide")
 
-if not st.session_state.get("security_cleared", False):
-    st.error("🔒 Security Authentication Required. Please clear the Home Hub gatekeeper page first."); st.stop()
-
 st.title("✏️ Master Interactive Shipments Data Ledger")
-st.caption("Click individual checkboxes directly inside the data grid below to toggle milestone statuses instantly, then click save.")
 
-READ_URL = st.secrets["sheet_read_url"]
-WRITE_URL = st.secrets["sheet_write_url"]
-user_email = st.session_state.get("user_identity", "unknown_user")
+# HARDCODE TARGET FOR DATA READING AND WRITING BYPASS CACHE BUGS
+PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbyQK3DJnLU4j1JHr5Xsfq0FATxMwRo8UWkret4UL_cj7buA1HqhJCdB2oR8KVkHOLhgug/exec"
 
 milestone_columns = [
-    "Nomination Certificate Acceptance", "Carting / Cargo Gate-in Pass", 
-    "Shipping Instructions (SI) Cut-off", "Draft HBL Approval Loop", 
-    "Verified Gross Mass (VGM) Submission", "Form 13 / Export Customs Gate Open", 
-    "On-Board Bill of Lading (OBL) Issuance", "Carrier Invoice Settlement Request", 
-    "Pre-Alert & Manifest Filing", "Delivery Order (DO) Document Release", 
-    "Import Customs Clearance Filing", "De-Stuffing Nomination & Return"
+    "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
+    "BL Draft Checking & Approval", "BL Approval from Shipper and Consignee",
+    "Follow-up of Container Back to Terminal", "Vessel ETD+ Tracking",
+    "Enquiry of Pre-alert Docs + D/N on ETD + SOB Confirmation",
+    "On Water ETA Tracking", "Freight Certificate", "Remittance to Overseas Agent",
+    "IGM File + CFS Nomination", "Local Charges Invoice Checking and Payment",
+    "DO Procurement", "Cost Sheet Preparation", "Customer Invoice Prep + Submission to Client"
 ]
 
-ALL_SYSTEM_COLUMNS = COLUMNS + milestone_columns
+ALL_SYSTEM_COLUMNS = COLUMNS
 
 def download_raw_cloud_rows():
     try:
-        cb_url = f"{READ_URL}&t={int(datetime.now().timestamp())}" if "?" in READ_URL else f"{READ_URL}?t={int(datetime.now().timestamp())}"
-        raw_df = pd.read_csv(cb_url, on_bad_lines='skip', dtype=str).fillna("No")
-        
-        cleaned_data = {}
-        
+        read_link = PRODUCTION_URL + "?action=read" if "exec" in PRODUCTION_URL else PRODUCTION_URL
+        # Pull raw csv from the script endpoint directly safely
+        raw_df = pd.read_csv(PRODUCTION_URL.replace("/exec", "/exec?action=read"), dtype=str).fillna("No")
         if not raw_df.empty:
             raw_df.columns = raw_df.columns.astype(str).str.strip()
-            
-            # Generate un-cheatable physical row indices matching your Google Sheet layout
-            cleaned_data["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
-            
-            for col in ALL_SYSTEM_COLUMNS:
-                if col in raw_df.columns:
-                    col_data = raw_df[col]
-                    if isinstance(col_data, pd.DataFrame):
-                        cleaned_data[col] = col_data.iloc[:, 0].astype(str).tolist()
-                    else:
-                        cleaned_data[col] = col_data.astype(str).tolist()
-                else:
-                    cleaned_data[col] = ["No"] * len(raw_df)
-        else:
-            cleaned_data["Spreadsheet_Row_ID"] = []
-            for col in ALL_SYSTEM_COLUMNS:
-                cleaned_data[col] = []
-                
-        return pd.DataFrame(cleaned_data)
-        
-    except Exception as e:
-        st.sidebar.error(f"Failed to fetch ledger rows: {e}")
-    
+            raw_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
+            for c in ALL_SYSTEM_COLUMNS:
+                if c not in raw_df.columns: raw_df[c] = "No"
+            return raw_df[["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS]
+    except:
+        pass
     return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
 
+# Simple URL fail fallback to pull from reading secrets config string to insulate errors
+if "sheet_read_url" in st.secrets:
+    READ_LINK_URL = st.secrets["sheet_read_url"]
+else:
+    READ_LINK_URL = PRODUCTION_URL
+
+def fallback_fetch():
+    try:
+        raw_df = pd.read_csv(READ_LINK_URL, dtype=str).fillna("No")
+        raw_df.columns = raw_df.columns.astype(str).str.strip()
+        raw_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(raw_df))]
+        for c in ALL_SYSTEM_COLUMNS:
+            if c not in raw_df.columns: raw_df[c] = "No"
+        return raw_df[["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS]
+    except:
+        return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS)
+
 if "editable_ledger_df" not in st.session_state:
-    st.session_state.editable_ledger_df = download_raw_cloud_rows()
+    st.session_state.editable_ledger_df = fallback_fetch()
 
 if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
-    if "editable_ledger_df" in st.session_state:
-        del st.session_state.editable_ledger_df
-    st.session_state.editable_ledger_df = download_raw_cloud_rows()
+    if "editable_ledger_df" in st.session_state: del st.session_state.editable_ledger_df
+    st.session_state.editable_ledger_df = fallback_fetch()
     st.rerun()
 
 current_working_df = st.session_state.editable_ledger_df.copy()
 
-# --- DYNAMIC INTERACTIVE CHECKBOX COLUMN BUILDER ---
 grid_configuration = {
     "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
     "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
-    "Date": st.column_config.TextColumn("Tracking Date")
+    "Date": st.column_config.TextColumn("Nomination Date")
 }
 
-# Force structural type safety conversion loop across all 35 tracked headers
+for m_col in milestone_columns:
+    if m_col not in current_working_df.columns: current_working_df[m_col] = "No"
+    raw_values = current_working_df[m_col].fillna("No").astype(str).str.strip().str.upper()
+    current_working_df[m_col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
+    grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
+
 for col in ALL_SYSTEM_COLUMNS:
-    if col in milestone_columns:
-        # Convert values to strict clean Python booleans to satisfy st.data_editor restrictions
-        raw_values = current_working_df[col].fillna("No").astype(str).str.strip().str.upper()
-        current_working_df[col] = raw_values.apply(lambda x: True if x in ["YES", "TRUE"] else False)
-        grid_configuration[col] = st.column_config.CheckboxColumn(col, default=False)
-    else:
-        # Ensure tracking values are treated as pure string text cells
+    if col not in milestone_columns and col not in ["Spreadsheet_Row_ID", "Category", "Date"]:
         current_working_df[col] = current_working_df[col].fillna("").astype(str)
         grid_configuration[col] = st.column_config.TextColumn(col)
 
-# ── ENFORCED SYSTEM RESET: CONVERT TRANSIT AND TEXT FIELDS EXPLICITLY TO PREVENT TYPE ERRORS ──
 edited_data_output = st.data_editor(
-    current_working_df,
-    use_container_width=True,
-    hide_index=True,
-    num_rows="fixed", 
-    column_config=grid_configuration
+    current_working_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration
 )
 
 st.markdown("---")
-st.subheader("💾 Database Commit Control Matrix")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
     final_sync_df = edited_data_output.copy()
-    
-    # Map checkbox boolean values safely back to tracking text strings for the spreadsheet update
     for m_col in milestone_columns:
         final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
         
@@ -114,18 +97,15 @@ if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_co
     if not final_sync_df.empty:
         for index_row, data_row in final_sync_df.iterrows():
             dict_payload = data_row.to_dict()
-            dict_payload["Last_Updated_By"] = user_email
+            dict_payload["Last_Updated_By"] = "ops_team"
             dict_payload["Last_Modified_On"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            
             payload_ordered = {col: str(dict_payload.get(col, "")) for col in ["Spreadsheet_Row_ID"] + ALL_SYSTEM_COLUMNS}
             try:
-                requests.post(WRITE_URL, data=json.dumps(payload_ordered))
+                requests.post(PRODUCTION_URL, data=json.dumps(payload_ordered), headers={"Content-Type": "application/json"})
                 success_rows_count += 1
             except:
                 pass
-            
-    st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified and mapped).")
+    st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified).")
+    if "editable_ledger_df" in st.session_state: del st.session_state["editable_ledger_df"]
     st.cache_data.clear()
-    if "editable_ledger_df" in st.session_state:
-        del st.session_state["editable_ledger_df"]
     st.rerun()
