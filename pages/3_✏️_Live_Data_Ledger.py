@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-from datetime import datetime
+import time
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Ledger Interface", layout="wide")
@@ -10,7 +10,8 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbwV-J5cDt8X-EL-hnSfh5_P-uc-lIFz_G30cvOdwmO5mbGKdKZ5v-sM2l_pYNOea17Waw/exec"
+# Direct extraction from the secure secrets vault
+PRODUCTION_URL = st.secrets["sheet_read_url"]
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
@@ -24,12 +25,15 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        df = pd.read_csv(PRODUCTION_URL, dtype=str).fillna("")
+        # Force a fresh download bypass link by adding an active random timestamp query
+        bypass_cache_url = f"{PRODUCTION_URL}?nocache={int(time.time())}"
+        df = pd.read_csv(bypass_cache_url, dtype=str).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
         for col in COLUMNS:
-            if col not in df.columns: df[col] = "No"
+            if col not in df.columns: 
+                df[col] = "No"
             
         # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
         df["Stage_Priority"] = df["Category"].map({
@@ -42,14 +46,16 @@ def fetch_master_dataframe():
         
         df = df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
         return df[["Spreadsheet_Row_ID"] + COLUMNS]
-    except:
+    except Exception as e:
+        st.sidebar.error(f"Sync Issue: {e}")
         return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
 
 if "editable_ledger_df" not in st.session_state:
     st.session_state.editable_ledger_df = fetch_master_dataframe()
 
 if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
-    if "editable_ledger_df" in st.session_state: del st.session_state.editable_ledger_df
+    if "editable_ledger_df" in st.session_state: 
+        del st.session_state.editable_ledger_df
     st.session_state.editable_ledger_df = fetch_master_dataframe()
     st.rerun()
 
@@ -77,16 +83,10 @@ grid_configuration = {
 for m_col in milestone_columns:
     grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
 
-# --- FIX: INJECT AN EXPLICIT KEY SUFFIX FOR EACH ISOLATED DATA TAB TOOL ---
 def render_interactive_grid(df_dataset, dynamic_key_suffix):
     styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
     return st.data_editor(
-        styled_df, 
-        use_container_width=True, 
-        hide_index=True, 
-        num_rows="fixed", 
-        column_config=grid_configuration, 
-        key=f"data_ledger_grid_{dynamic_key_suffix}"
+        styled_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}"
     )
 
 with tab_master:
@@ -105,7 +105,6 @@ with tab_rs:
     st.markdown("⚓ **Isolated View: Arrived / Cargo Delivered Records**")
     render_interactive_grid(raw_working_data[raw_working_data["Category"].isin(["Reached shore yet to release", "Released", "Empty container returned"])], "shore_released_view")
 
-
 st.markdown("---")
 if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
     final_sync_df = edited_output.copy()
@@ -123,5 +122,6 @@ if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_co
             except:
                 pass
     st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified).")
-    if "editable_ledger_df" in st.session_state: del st.session_state["editable_ledger_df"]
+    if "editable_ledger_df" in st.session_state: 
+        del st.session_state["editable_ledger_df"]
     st.rerun()
