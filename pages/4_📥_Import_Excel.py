@@ -12,7 +12,7 @@ if not st.session_state.get("security_cleared", False):
 st.title("📥 Logistics Excel Batch Import Engine")
 st.caption("Upload `.xlsx` or `.xls` spreadsheets. Missing data inputs or milestones default to empty values so you can fill them manually later inside the Live Ledger.")
 
-PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbzSdKAoV3EIUteCipYRi1wcl9GUmCLApFrGfh9-yYMRkGJCSuB1Z_Y7XgPoEq8nNxbq5Q/exec"
+PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbwV-J5cDt8X-EL-hnSfh5_P-uc-lIFz_G30cvOdwmO5mbGKdKZ5v-sM2l_pYNOea17Waw/exec"
 
 # 🏭 Structural Data Template Guide Layout for users
 st.info("💡 **Formatting Rule:** For best results, name your Excel sheet columns similarly to your master spreadsheet headers (e.g., 'Customer', 'Booking_MBL', 'HBL', 'Container'). Any mismatched headers can be left empty!")
