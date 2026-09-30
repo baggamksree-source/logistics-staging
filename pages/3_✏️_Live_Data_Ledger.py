@@ -27,7 +27,7 @@ milestone_columns = [
 def fetch_master_dataframe():
     try:
         # Bypasses internal cache parameters completely
-        direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
+        direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&gid=0&ts={int(time.time())}"
         
         # Read the raw web request response text stream first
         response = requests.get(direct_csv_url, timeout=15)
