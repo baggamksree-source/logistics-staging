@@ -11,7 +11,6 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-# Secure link connection directly from your secrets vault panel
 PRODUCTION_URL = st.secrets["sheet_read_url"]
 
 milestone_columns = [
@@ -26,14 +25,12 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        # Step 1: Request raw data directly with a cache buster timestamp
         bypass_url = f"{PRODUCTION_URL}?ts={int(time.time())}"
         response = requests.get(bypass_url, timeout=15)
         
         if response.status_code != 200 or not response.text.strip():
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # Step 2: Parse raw string data text manually line-by-line to protect columns layout
         raw_text_stream = io.StringIO(response.text.strip())
         csv_reader_engine = csv.reader(raw_text_stream)
         all_parsed_rows = list(csv_reader_engine)
@@ -41,23 +38,24 @@ def fetch_master_dataframe():
         if len(all_parsed_rows) <= 1:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # Step 3: Extract text titles and isolate rows
+        # FIXED: Explicit matrix row-index slicing matching rules
         extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
-        st.sidebar.write("📋 Google Headers Found Live:")
-        st.sidebar.json(extracted_headers)
         data_body_rows = all_parsed_rows[1:]
         
-        # Build clean temporary data frame array frame
-        temp_df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
+        # Build clean data array frame safely
+        temp_df = pd.DataFrame(data_body_rows, columns=extracted_headers)
         
-        # Inject matching row index numbers based on spreadsheet lines
-        temp_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(temp_df))]
-        
-        # Enforce column structural template stability definitions
+        # Ensure all core formatting column spaces exist cleanly
         for col in COLUMNS:
             if col not in temp_df.columns: 
-                temp_df[col] = "No"
-                
+                temp_df[col] = ""
+        
+        # FIXED: Enforces independent calculation layers for row identities matrix tracking
+        row_id_list = []
+        for idx in range(len(temp_df)):
+            row_id_list.append(str(idx + 2))
+        temp_df["Spreadsheet_Row_ID"] = row_id_list
+        
         # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
         temp_df["Stage_Priority"] = temp_df["Category"].map({
             "Yet to sail": 1,
@@ -97,8 +95,10 @@ tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid V
 
 raw_working_data = st.session_state.editable_ledger_df.copy()
 
+# Fixed: Clean checkbox evaluation values transformation loop
 for m_col in milestone_columns:
-    raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(lambda x: True if x in ["YES", "TRUE"] else False)
+    if m_col in raw_working_data.columns:
+        raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(lambda x: True if x in ["YES", "TRUE"] else False)
 
 grid_configuration = {
     "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
