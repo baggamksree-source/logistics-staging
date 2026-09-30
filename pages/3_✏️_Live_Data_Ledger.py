@@ -43,6 +43,8 @@ def fetch_master_dataframe():
             
         # Step 3: Extract text titles and isolate rows
         extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
+        st.sidebar.write("📋 Google Headers Found Live:")
+        st.sidebar.json(extracted_headers)
         data_body_rows = all_parsed_rows[1:]
         
         # Build clean temporary data frame array frame
