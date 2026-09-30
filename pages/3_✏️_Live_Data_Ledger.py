@@ -31,6 +31,7 @@ def fetch_master_dataframe():
         if response.status_code != 200 or not response.text.strip():
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
+        # Parse CSV strings completely immune to internal comma/formatting errors
         raw_text_stream = io.StringIO(response.text.strip())
         csv_reader_engine = csv.reader(raw_text_stream)
         all_parsed_rows = list(csv_reader_engine)
@@ -38,38 +39,29 @@ def fetch_master_dataframe():
         if len(all_parsed_rows) <= 1:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # FIXED: Explicit matrix row-index slicing matching rules
         extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
         data_body_rows = all_parsed_rows[1:]
         
-        # Build clean data array frame safely
         temp_df = pd.DataFrame(data_body_rows, columns=extracted_headers)
         
-        # Ensure all core formatting column spaces exist cleanly
+        # Lock structure down to your 31 master headers template
         for col in COLUMNS:
             if col not in temp_df.columns: 
                 temp_df[col] = ""
+                
+        temp_df["Spreadsheet_Row_ID"] = [str(idx + 2) for idx in range(len(temp_df))]
         
-        # FIXED: Enforces independent calculation layers for row identities matrix tracking
-        row_id_list = []
-        for idx in range(len(temp_df)):
-            row_id_list.append(str(idx + 2))
-        temp_df["Spreadsheet_Row_ID"] = row_id_list
-        
-        # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
+        # Sort using operational phase orders
         temp_df["Stage_Priority"] = temp_df["Category"].map({
-            "Yet to sail": 1,
-            "On water": 2,
-            "Reached shore yet to release": 3,
-            "Released": 4,
-            "Empty container returned": 5
+            "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
+            "Released": 4, "Empty container returned": 5
         }).fillna(6)
         
         temp_df = temp_df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
         return temp_df[["Spreadsheet_Row_ID"] + COLUMNS]
         
-    except Exception as network_error:
-        st.sidebar.error(f"Sync Issue: {network_error}")
+    except Exception as e:
+        st.sidebar.error(f"Sync Issue: {e}")
         return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
 
 if "editable_ledger_df" not in st.session_state:
@@ -81,7 +73,7 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = fetch_master_dataframe()
     st.rerun()
 
-# --- COLOR MATRIX THEME STYLING DEFINITIONS ---
+# Row background matrix rendering
 def apply_phase_color_rows(row):
     phase = str(row["Category"]).strip()
     if phase == "Yet to sail": return ["background-color: #FFFFFF; color: #000000"] * len(row)
@@ -95,7 +87,6 @@ tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid V
 
 raw_working_data = st.session_state.editable_ledger_df.copy()
 
-# Fixed: Clean checkbox evaluation values transformation loop
 for m_col in milestone_columns:
     if m_col in raw_working_data.columns:
         raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(lambda x: True if x in ["YES", "TRUE"] else False)
@@ -109,9 +100,7 @@ for m_col in milestone_columns:
 
 def render_interactive_grid(df_dataset, dynamic_key_suffix):
     styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
-    return st.data_editor(
-        styled_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}"
-    )
+    return st.data_editor(styled_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}")
 
 with tab_master:
     st.markdown("🟢 **Master Consolidated Queue Line**")
