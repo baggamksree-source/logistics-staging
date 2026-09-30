@@ -3,32 +3,28 @@ import pandas as pd
 import requests
 import json
 import time
-import csv
-import io
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Log Shipment", layout="wide")
 
 st.title("📥 Log New Sea Import Shipment")
-st.caption("Fill in the operational transport details. Checklist columns initialize automatically to 'No'.")
+st.caption("Type directly into the fields to select an existing name or create a brand-new entry instantly.")
 
 PRODUCTION_URL = st.secrets["sheet_write_url"]
-READ_URL = st.secrets["sheet_read_url"]
+SPREADSHEET_ID = st.secrets["spreadsheet_id"]
 
 def get_autocomplete_options():
     try:
-        res = requests.get(f"{READ_URL}?t={int(time.time())}", timeout=10)
-        if res.status_code == 200 and res.text.strip():
-            stream = io.StringIO(res.text.strip())
-            rows = list(csv.reader(stream))
-            if len(rows) > 1:
-                df = pd.DataFrame(rows[1:], columns=[str(h).strip() for h in rows[0]])
-                customers = sorted(list(df["Customer"].unique())) if "Customer" in df.columns else []
-                agents = sorted(list(df["Agent"].unique())) if "Agent" in df.columns else []
-                return [c for c in customers if c], [a for a in agents if a]
+        # Pulls directly from Google's internal engine bypassing apps script blocks entirely
+        direct_csv_url = f"https://google.com{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
+        df = pd.read_csv(direct_csv_url, dtype=str).fillna("")
+        df.columns = df.columns.astype(str).str.strip()
+        
+        customers = sorted([c for c in df["Customer"].unique() if c.strip()]) if "Customer" in df.columns else []
+        agents = sorted([a for a in df["Agent"].unique() if a.strip()]) if "Agent" in df.columns else []
+        return customers, agents
     except:
-        pass
-    return [], []
+        return [], []
 
 existing_customers, existing_agents = get_autocomplete_options()
 
@@ -43,22 +39,28 @@ with st.form("new_shipment_form", clear_on_submit=True):
     r2_col1, r2_col2 = st.columns(2)
     
     with r2_col1:
-        cust_options = ["-- New Customer --"] + existing_customers
-        selected_cust = st.selectbox("Customer Entity Title", options=cust_options)
-        # FIXED: Always show typing field if choosing new customer or dropdown list is blank
-        if selected_cust == "-- New Customer --" or not existing_customers:
-            customer_val = st.text_input("Type New Customer Name *")
-        else:
-            customer_val = selected_cust
+        # SINGLE SEARCHABLE COMBINED TEXT BOX FOR CUSTOMERS
+        customer_val = st.selectbox(
+            "Customer Entity Title (Type to search / create new)",
+            options=existing_customers if existing_customers else [""],
+            index=0 if existing_customers else None,
+            placeholder="Type or select customer name...",
+            disabled=False
+        )
+        # Fallback to text input if list is empty so you are never locked out
+        if not existing_customers:
+            customer_val = st.text_input("Type Customer Name *")
             
     with r2_col2:
-        agent_options = ["-- New Agent --"] + existing_agents
-        selected_agent = st.selectbox("Assigned Agent Partner", options=agent_options)
-        # FIXED: Always show typing field if choosing new agent or dropdown list is blank
-        if selected_agent == "-- New Agent --" or not existing_agents:
-            agent_val = st.text_input("Type New Agent Name *")
-        else:
-            agent_val = selected_agent
+        # SINGLE SEARCHABLE COMBINED TEXT BOX FOR AGENTS
+        agent_val = st.selectbox(
+            "Assigned Agent Partner (Type to search / create new)",
+            options=existing_agents if existing_agents else [""],
+            index=0 if existing_agents else None,
+            placeholder="Type or select agent partner..."
+        )
+        if not existing_agents:
+            agent_val = st.text_input("Type Agent Name *")
 
     st.markdown("---")
     r3_col1, r3_col2, r3_col3, r3_col4 = st.columns(4)
@@ -99,7 +101,7 @@ with st.form("new_shipment_form", clear_on_submit=True):
     submit_btn = st.form_submit_button("🚀 Append File to Master Cloud Sheets Database", type="primary", use_container_width=True)
     
     if submit_btn:
-        if not customer_val.strip() or not mbl_val.strip():
+        if not str(customer_val).strip() or not mbl_val.strip():
             st.error("⚠️ Required Fields Missing! Customer and MBL details must be populated.")
         else:
             payload = {col: "" for col in COLUMNS}
@@ -130,7 +132,7 @@ with st.form("new_shipment_form", clear_on_submit=True):
             try:
                 response = requests.post(PRODUCTION_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"}, timeout=15)
                 if response.status_code == 200:
-                    st.success(f"🎉 Success! Shipment for '{customer_val}' appended seamlessly to Google Sheet!")
+                    st.success(f"🎉 Success! Shipment appended seamlessly to Google Sheet Row!")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
