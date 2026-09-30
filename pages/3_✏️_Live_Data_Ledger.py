@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import requests
-import io
 import json
 import time
+import io
+import csv
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Ledger Interface", layout="wide")
@@ -11,8 +12,8 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
+# Routing directly through your working Apps Script Web App Endpoint
 PRODUCTION_URL = st.secrets["sheet_write_url"]
-SPREADSHEET_ID = st.secrets["spreadsheet_id"]
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
@@ -26,28 +27,28 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        # Bypasses internal cache parameters completely
-        direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&gid=0&ts={int(time.time())}"
+        # Calls the doGet(e) method inside your healthy script pipeline
+        sync_link = f"{PRODUCTION_URL}?ts={int(time.time())}"
+        response = requests.get(sync_link, timeout=15)
         
-        # Read the raw web request response text stream first
-        response = requests.get(direct_csv_url, timeout=15)
-        
-        # DEBUG TERMINAL: Prints raw metrics directly into the app sidebar space
-        if response.status_code == 200:
-            lines = response.text.strip().split("\n")
-            st.sidebar.success(f"📡 Pipeline Live: Found {len(lines)} lines")
-            if len(lines) > 0:
-                st.sidebar.caption(f"Header preview: {lines[0][:50]}...")
-        else:
-            st.sidebar.error(f"Google Response Status Code: {response.status_code}")
-
-        # Safe parsing engine load loop
-        df = pd.read_csv(io.StringIO(response.text), dtype=str).fillna("")
-        df.columns = df.columns.astype(str).str.strip()
-        
-        if df.empty:
+        if response.status_code != 200 or not response.text.strip():
+            st.sidebar.warning("⚠️ Connected safely, but sheet cell data is currently empty.")
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
+        # Parse text stream safely through memory buffers
+        raw_text_stream = io.StringIO(response.text.strip())
+        csv_reader_engine = csv.reader(raw_text_stream)
+        all_parsed_rows = list(csv_reader_engine)
+        
+        if len(all_parsed_rows) <= 1:
+            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
+            
+        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
+        data_body_rows = all_parsed_rows[1:]
+        
+        df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
+        df.columns = df.columns.astype(str).str.strip()
+        
         df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
         for col in COLUMNS:
