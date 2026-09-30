@@ -28,6 +28,8 @@ def fetch_master_dataframe():
         # Force a fresh download bypass link by adding an active random timestamp query
         bypass_cache_url = f"{PRODUCTION_URL}?nocache={int(time.time())}"
         df = pd.read_csv(bypass_cache_url, dtype=str).fillna("")
+        st.sidebar.write("📋 Google Sheet Headers Found:")
+        st.sidebar.json(list(df.columns))
         df.columns = df.columns.astype(str).str.strip()
         df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
