@@ -26,7 +26,7 @@ milestone_columns = [
 def fetch_master_dataframe():
     try:
         # Bypasses Apps Script formatting loops by downloading directly from the source workbook core
-        direct_csv_url = f"https://google.com{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
+        direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
         df = pd.read_csv(direct_csv_url, dtype=str).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         
