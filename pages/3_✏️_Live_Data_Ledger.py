@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import io
 import json
 import time
 from utils import COLUMNS, STAGES
@@ -25,9 +26,23 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        # Bypasses Apps Script formatting loops by downloading directly from the source workbook core
+        # Bypasses internal cache parameters completely
         direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
-        df = pd.read_csv(direct_csv_url, dtype=str).fillna("")
+        
+        # Read the raw web request response text stream first
+        response = requests.get(direct_csv_url, timeout=15)
+        
+        # DEBUG TERMINAL: Prints raw metrics directly into the app sidebar space
+        if response.status_code == 200:
+            lines = response.text.strip().split("\n")
+            st.sidebar.success(f"📡 Pipeline Live: Found {len(lines)} lines")
+            if len(lines) > 0:
+                st.sidebar.caption(f"Header preview: {lines[0][:50]}...")
+        else:
+            st.sidebar.error(f"Google Response Status Code: {response.status_code}")
+
+        # Safe parsing engine load loop
+        df = pd.read_csv(io.StringIO(response.text), dtype=str).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         
         if df.empty:
