@@ -12,7 +12,7 @@ st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
 # Secure link connection directly from your secrets vault panel
-PRODUCTION_URL = st.secrets["https://script.google.com/macros/s/AKfycbxWUto63pxm-pg03X0epJzYARqWA0preXT92JfgIQYPca6Gw1hP69gdij49wA3u-x5ShA/exec"]
+PRODUCTION_URL = st.secrets["sheet_read_url"]
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
