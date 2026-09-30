@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-import csv
-import io
+import json
 import time
 from utils import COLUMNS, STAGES
 
@@ -11,7 +10,8 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-PRODUCTION_URL = st.secrets["sheet_read_url"]
+PRODUCTION_URL = st.secrets["sheet_write_url"]
+SPREADSHEET_ID = st.secrets["spreadsheet_id"]
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
@@ -25,41 +25,28 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        bypass_url = f"{PRODUCTION_URL}?ts={int(time.time())}"
-        response = requests.get(bypass_url, timeout=15)
+        # Bypasses Apps Script formatting loops by downloading directly from the source workbook core
+        direct_csv_url = f"https://google.com{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
+        df = pd.read_csv(direct_csv_url, dtype=str).fillna("")
+        df.columns = df.columns.astype(str).str.strip()
         
-        if response.status_code != 200 or not response.text.strip():
+        if df.empty:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # Parse CSV strings completely immune to internal comma/formatting errors
-        raw_text_stream = io.StringIO(response.text.strip())
-        csv_reader_engine = csv.reader(raw_text_stream)
-        all_parsed_rows = list(csv_reader_engine)
+        df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
-        if len(all_parsed_rows) <= 1:
-            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
-            
-        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
-        data_body_rows = all_parsed_rows[1:]
-        
-        temp_df = pd.DataFrame(data_body_rows, columns=extracted_headers)
-        
-        # Lock structure down to your 31 master headers template
         for col in COLUMNS:
-            if col not in temp_df.columns: 
-                temp_df[col] = ""
+            if col not in df.columns: 
+                df[col] = ""
                 
-        temp_df["Spreadsheet_Row_ID"] = [str(idx + 2) for idx in range(len(temp_df))]
-        
-        # Sort using operational phase orders
-        temp_df["Stage_Priority"] = temp_df["Category"].map({
+        # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
+        df["Stage_Priority"] = df["Category"].map({
             "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
             "Released": 4, "Empty container returned": 5
         }).fillna(6)
         
-        temp_df = temp_df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
-        return temp_df[["Spreadsheet_Row_ID"] + COLUMNS]
-        
+        df = df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
+        return df[["Spreadsheet_Row_ID"] + COLUMNS]
     except Exception as e:
         st.sidebar.error(f"Sync Issue: {e}")
         return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
@@ -73,7 +60,6 @@ if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.editable_ledger_df = fetch_master_dataframe()
     st.rerun()
 
-# Row background matrix rendering
 def apply_phase_color_rows(row):
     phase = str(row["Category"]).strip()
     if phase == "Yet to sail": return ["background-color: #FFFFFF; color: #000000"] * len(row)
