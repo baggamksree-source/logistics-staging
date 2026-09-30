@@ -10,7 +10,7 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbxP9HmhKhRW6X6VAEOI9IWp9bc5DY8RbfqAMTYLIN3wGX-EKNnuup-kNucPZ-jtL7sTSg/exec"
+PRODUCTION_URL = "https://script.google.com/macros/s/AKfycbzSdKAoV3EIUteCipYRi1wcl9GUmCLApFrGfh9-yYMRkGJCSuB1Z_Y7XgPoEq8nNxbq5Q/exec"
 
 milestone_columns = [
     "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
