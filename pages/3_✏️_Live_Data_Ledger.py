@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
+import csv
+import io
 import time
 from utils import COLUMNS, STAGES
 
@@ -10,7 +11,7 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-# Direct extraction from the secure secrets vault
+# Secure link connection directly from your secrets vault panel
 PRODUCTION_URL = st.secrets["sheet_read_url"]
 
 milestone_columns = [
@@ -25,20 +26,38 @@ milestone_columns = [
 
 def fetch_master_dataframe():
     try:
-        # Force a fresh download bypass link by adding an active random timestamp query
-        bypass_cache_url = f"{PRODUCTION_URL}?nocache={int(time.time())}"
-        df = pd.read_csv(bypass_cache_url, dtype=str).fillna("")
-        st.sidebar.write("📋 Google Sheet Headers Found:")
-        st.sidebar.json(list(df.columns))
-        df.columns = df.columns.astype(str).str.strip()
-        df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
+        # Step 1: Request raw data directly with a cache buster timestamp
+        bypass_url = f"{PRODUCTION_URL}?ts={int(time.time())}"
+        response = requests.get(bypass_url, timeout=15)
         
-        for col in COLUMNS:
-            if col not in df.columns: 
-                df[col] = "No"
+        if response.status_code != 200 or not response.text.strip():
+            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
+        # Step 2: Parse raw string data text manually line-by-line to protect columns layout
+        raw_text_stream = io.StringIO(response.text.strip())
+        csv_reader_engine = csv.reader(raw_text_stream)
+        all_parsed_rows = list(csv_reader_engine)
+        
+        if len(all_parsed_rows) <= 1:
+            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
+            
+        # Step 3: Extract text titles and isolate rows
+        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
+        data_body_rows = all_parsed_rows[1:]
+        
+        # Build clean temporary data frame array frame
+        temp_df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
+        
+        # Inject matching row index numbers based on spreadsheet lines
+        temp_df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(temp_df))]
+        
+        # Enforce column structural template stability definitions
+        for col in COLUMNS:
+            if col not in temp_df.columns: 
+                temp_df[col] = "No"
+                
         # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
-        df["Stage_Priority"] = df["Category"].map({
+        temp_df["Stage_Priority"] = temp_df["Category"].map({
             "Yet to sail": 1,
             "On water": 2,
             "Reached shore yet to release": 3,
@@ -46,10 +65,11 @@ def fetch_master_dataframe():
             "Empty container returned": 5
         }).fillna(6)
         
-        df = df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
-        return df[["Spreadsheet_Row_ID"] + COLUMNS]
-    except Exception as e:
-        st.sidebar.error(f"Sync Issue: {e}")
+        temp_df = temp_df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
+        return temp_df[["Spreadsheet_Row_ID"] + COLUMNS]
+        
+    except Exception as network_error:
+        st.sidebar.error(f"Sync Issue: {network_error}")
         return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
 
 if "editable_ledger_df" not in st.session_state:
