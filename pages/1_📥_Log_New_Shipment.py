@@ -15,7 +15,7 @@ SPREADSHEET_ID = st.secrets["spreadsheet_id"]
 
 def get_autocomplete_options():
     try:
-        direct_csv_url = f"https://google.com{SPREADSHEET_ID}/export?format=csv&ts={int(time.time())}"
+        direct_csv_url = f"https://google.com/d/{SPREADSHEET_ID}/export?format=csv&gid=0&ts={int(time.time())}"
         df = pd.read_csv(direct_csv_url, dtype=str).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         
