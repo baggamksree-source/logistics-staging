@@ -14,7 +14,7 @@ st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed
 
 PRODUCTION_URL = st.secrets["sheet_write_url"]
 
-# FIXED: Brand new 13 custom operational milestones array setup
+# SYNCHRONIZED: The 13 operational milestones mapped to your checkboxes layout
 milestone_columns = [
     "SO", "Empty container pickup", "Laden containers gatein", "SOB", 
     "Draft BL Checking and Approval", "Pre-alert documents", "Remittance", 
@@ -37,14 +37,17 @@ def fetch_master_dataframe():
         if len(all_parsed_rows) <= 1:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        extracted_headers = [str(h).strip() for h in all_parsed_rows]
+        # Parse out extracted headers safely dynamically aligned with sheet size
+        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
         data_body_rows = all_parsed_rows[1:]
         
+        # Build layout explicitly matching Google's data array length
         df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         
         df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
+        # Backfill any missing arrays from the core columns definition layout
         for col in COLUMNS:
             if col not in df.columns: 
                 df[col] = ""
@@ -82,9 +85,12 @@ tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid V
 
 raw_working_data = st.session_state.editable_ledger_df.copy()
 
+# Render checkboxes safely checking against text dates or status fields cleanly
 for m_col in milestone_columns:
     if m_col in raw_working_data.columns:
-        raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(lambda x: True if x in ["YES", "TRUE"] else False)
+        raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(
+            lambda x: True if x in ["YES", "TRUE", "DONE"] else False
+        )
 
 grid_configuration = {
     "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
