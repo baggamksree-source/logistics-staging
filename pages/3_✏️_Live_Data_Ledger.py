@@ -12,30 +12,24 @@ st.set_page_config(page_title="Ledger Interface", layout="wide")
 st.title("✏️ Master Interactive Shipments Data Ledger")
 st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
 
-# Routing directly through your working Apps Script Web App Endpoint
 PRODUCTION_URL = st.secrets["sheet_write_url"]
 
+# FIXED: Brand new 13 custom operational milestones array setup
 milestone_columns = [
-    "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
-    "BL Draft Checking & Approval", "BL Approval from Shipper and Consignee",
-    "Follow-up of Container Back to Terminal", "Vessel ETD+ Tracking",
-    "Enquiry of Pre-alert Docs + D/N on ETD + SOB Confirmation",
-    "On Water ETA Tracking", "Freight Certificate", "Remittance to Overseas Agent",
-    "IGM File + CFS Nomination", "Local Charges Invoice Checking and Payment",
-    "DO Procurement", "Cost Sheet Preparation", "Customer Invoice Prep + Submission to Client"
+    "SO", "Empty container pickup", "Laden containers gatein", "SOB", 
+    "Draft BL Checking and Approval", "Pre-alert documents", "Remittance", 
+    "Telex/original bl", "FC", "Odex filing/manual", "Invoice", "DO", 
+    "Empty containers return"
 ]
 
 def fetch_master_dataframe():
     try:
-        # Calls the doGet(e) method inside your healthy script pipeline
         sync_link = f"{PRODUCTION_URL}?ts={int(time.time())}"
         response = requests.get(sync_link, timeout=15)
         
         if response.status_code != 200 or not response.text.strip():
-            st.sidebar.warning("⚠️ Connected safely, but sheet cell data is currently empty.")
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # Parse text stream safely through memory buffers
         raw_text_stream = io.StringIO(response.text.strip())
         csv_reader_engine = csv.reader(raw_text_stream)
         all_parsed_rows = list(csv_reader_engine)
@@ -43,7 +37,7 @@ def fetch_master_dataframe():
         if len(all_parsed_rows) <= 1:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
+        extracted_headers = [str(h).strip() for h in all_parsed_rows]
         data_body_rows = all_parsed_rows[1:]
         
         df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
@@ -55,7 +49,6 @@ def fetch_master_dataframe():
             if col not in df.columns: 
                 df[col] = ""
                 
-        # --- ENFORCED PRIORITY SORTING PIPELINE LOGIC ---
         df["Stage_Priority"] = df["Category"].map({
             "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
             "Released": 4, "Empty container returned": 5
