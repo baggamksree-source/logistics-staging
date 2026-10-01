@@ -1,17 +1,14 @@
 # utils.py
-# Cleaned and Optimized Logistics Data Mapping Layout (31 Columns)
+# 🏢 UPDATED MASTER LOGISTICS TEMPLATE MATRIX (29 COLUMNS FIXED)
 
 COLUMNS = [
     "Date", "Category", "Customer", "Agent", "HBL", "Liner", "Booking_MBL", 
     "Container", "POL", "POD", "ETD_as_per_SO", "ETD_ATD", "ETA_ATA", 
     "Follow_up_remarks", "Next_Follow_up", "HBL_Remarks", "Revenue_to_be_Billed", 
-    "SO Must Arrive", "Container Pick Up / Stuffing / Handover",
-    "BL Draft Checking & Approval", "BL Approval from Shipper and Consignee",
-    "Follow-up of Container Back to Terminal", "Vessel ETD+ Tracking",
-    "Enquiry of Pre-alert Docs + D/N on ETD + SOB Confirmation",
-    "On Water ETA Tracking", "Freight Certificate", "Remittance to Overseas Agent",
-    "IGM File + CFS Nomination", "Local Charges Invoice Checking and Payment",
-    "DO Procurement", "Cost Sheet Preparation", "Customer Invoice Prep + Submission to Client"
+    "SO", "Empty container pickup", "Laden containers gatein", "SOB", 
+    "Draft BL Checking and Approval", "Pre-alert documents", "Remittance", 
+    "Telex/original bl", "FC", "Odex filing/manual", "Invoice", "DO", 
+    "Empty containers return"
 ]
 
 STAGES = [
