@@ -20,7 +20,7 @@ if not user_email or user_email in ["none", ""]:
         st.info("👋 Please enter your Office Name or Email in the sidebar box to unlock your tools.")
         st.stop()
 
-target_domain = str(st.secrets.get("allowed_domain", "yourcompany.com")).strip().lower()
+target_domain = str(st.secrets.get("allowed_domain", "sjagannath.com")).strip().lower()
 if "@" in user_email and not user_email.endswith(f"@{target_domain}"):
     st.subheader("🔒 Access Restricted")
     st.error(f"Your account ({user_email}) is outside the authorized corporate domain (@{target_domain}). Access denied.")
