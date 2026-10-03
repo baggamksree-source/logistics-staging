@@ -4,12 +4,13 @@ import requests
 import json
 import time
 import io
+import csv
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Ledger Interface", layout="wide")
 
 st.title("✏️ Master Interactive Shipments Data Ledger")
-st.caption("Read pipeline: Auto-healing column index data mapping enabled.")
+st.caption("Read pipeline: Hybrid Fail-Safe Sync Activated (Direct GCloud with AppsScript Fallback).")
 
 PRODUCTION_WRITE_URL = st.secrets["sheet_write_url"]
 RAW_READ_URL = st.secrets["sheet_read_url"]
@@ -22,68 +23,81 @@ milestone_columns = [
 ]
 
 def fetch_master_dataframe_direct():
+    # 🚀 PRIMARY PIPELINE: High-Speed Direct CSV Stream
     try:
-        # Split share link and convert to a direct export download pipeline
-        base_url = RAW_READ_URL.split('/edit')
-        csv_download_pipe = f"{base_url[0]}/export?format=csv&gid=0&ts={int(time.time() * 1000)}"
-        
-        response = requests.get(csv_download_pipe, timeout=15)
-        
-        if response.status_code != 200 or not response.text.strip():
-            st.sidebar.error("Could not retrieve a valid data stream from the cloud storage engine.")
-            return pd.DataFrame()
+        clean_url = RAW_READ_URL
+        if "/edit" in clean_url:
+            clean_url = clean_url.split('/edit')[0] + "/export?format=csv&gid=0"
+        elif "/export" not in clean_url:
+            clean_url = clean_url.rstrip('/') + "/export?format=csv&gid=0"
             
-        # Read the raw sheet data line-by-line to properly parse the double-wrapped header row layout
-        raw_text_lines = response.text.strip().split('\n')
-        if len(raw_text_lines) <= 2:
-            return pd.DataFrame()
-            
-        # DYNAMIC MATCHING ENGINE: Safely extract rows 3 onwards, skipping the broken headers entirely
-        data_body_csv = "\n".join(raw_text_lines[2:])
-        raw_df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
+        sync_link = f"{clean_url}&ts={int(time.time() * 1000)}"
+        response = requests.get(sync_link, timeout=8)
         
-        # Clip columns array length definitions dynamically to match structural counts
-        columns_pool = list(COLUMNS)
-        current_data_cols_count = len(raw_df.columns)
+        if response.status_code == 200 and response.text.strip():
+            raw_text_lines = response.text.strip().split('\n')
+            if len(raw_text_lines) > 2:
+                data_body_csv = "\n".join(raw_text_lines[2:])
+                df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
+                return process_extracted_dataframe(df)
+    except Exception as e:
+        pass
+
+    # 🔄 BACKUP PIPELINE: AppsScript Engine Fetcher (Triggers if primary connection times out)
+    try:
+        st.sidebar.warning("⚡ Primary channel locked. Deploying AppsScript fallback...")
+        fallback_link = f"{PRODUCTION_WRITE_URL}?ts={int(time.time() * 1000)}"
+        response = requests.get(fallback_link, timeout=15)
         
+        if response.status_code == 200 and response.text.strip():
+            raw_text_stream = io.StringIO(response.text.strip())
+            csv_reader = csv.reader(raw_text_stream)
+            all_rows = list(csv_reader)
+            if len(all_rows) > 1:
+                df = pd.DataFrame(all_rows[1:], columns=[str(h).strip() for h in all_rows[0]]).fillna("")
+                return process_extracted_dataframe(df, is_fallback=True)
+    except Exception as e:
+        st.sidebar.error(f"All database connection channels exhausted: {e}")
+        
+    return pd.DataFrame()
+
+def process_extracted_dataframe(raw_df, is_fallback=False):
+    columns_pool = list(COLUMNS)
+    current_data_cols_count = len(raw_df.columns)
+    
+    if is_fallback:
+        # AppsScript already returns clean matching headers
+        df_processed = raw_df.copy()
+    else:
+        # Standardize direct export array maps
         if current_data_cols_count < len(columns_pool):
             columns_pool = columns_pool[:current_data_cols_count]
         elif current_data_cols_count > len(columns_pool):
-            # Pad array boundaries if the sheet contains extra legacy rows
             for diff in range(current_data_cols_count - len(columns_pool)):
                 columns_pool.append(f"Legacy_Field_{diff+1}")
-                
         raw_df.columns = columns_pool
+        df_processed = raw_df.copy()
         
-        # Clean up key index matching structures to align maps cleanly
-        if "Category" not in raw_df.columns:
-            st.error("Header Alignment Warning: Could not locate 'Category' phase tracking column.")
-            return pd.DataFrame()
-            
-        # Reconstruct actual physical spreadsheet row IDs matching index maps
-        raw_df["Spreadsheet_Row_ID"] = [str(i + 3) for i in range(len(raw_df))]
-        
-        # Strip invisible text spaces from data parameters
-        raw_df["Category"] = raw_df["Category"].astype(str).str.strip()
-        
-        raw_df["Stage_Priority"] = raw_df["Category"].map({
-            "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
-            "Released": 4, "Empty container returned": 5
-        }).fillna(6)
-        
-        raw_df = raw_df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
-        
-        final_cols_order = ["Spreadsheet_Row_ID"] + [c for c in columns_pool if c != "Spreadsheet_Row_ID"]
-        return raw_df[final_cols_order]
-    except Exception as e:
-        st.sidebar.error(f"Extraction Pipeline Interruption: {e}")
+    if "Category" not in df_processed.columns:
         return pd.DataFrame()
+        
+    # Standardize Row ID maps cleanly across double headers
+    row_offset = 2 if is_fallback else 3
+    df_processed["Spreadsheet_Row_ID"] = [str(i + row_offset) for i in range(len(df_processed))]
+    df_processed["Category"] = df_processed["Category"].astype(str).str.strip()
+    
+    df_processed["Stage_Priority"] = df_processed["Category"].map({
+        "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
+        "Released": 4, "Empty container returned": 5
+    }).fillna(6)
+    
+    df_processed = df_processed.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
+    final_cols_order = ["Spreadsheet_Row_ID"] + [c for c in df_processed.columns if c not in ["Spreadsheet_Row_ID", "Stage_Priority"]]
+    return df_processed[final_cols_order]
 
-# Inject fresh dataset rows values instantly
+# Dynamic UI Loader Engine
 if 'ledger_fresh_data' not in st.session_state or st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.ledger_fresh_data = fetch_master_dataframe_direct()
-    if not st.session_state.ledger_fresh_data.empty:
-        st.toast("Database tables updated live!", icon="⚡")
 
 working_df = st.session_state.ledger_fresh_data.copy()
 
@@ -97,7 +111,6 @@ def apply_phase_color_rows(row):
     return [""] * len(row)
 
 if not working_df.empty:
-    # Process milestone string flags into valid Streamlit interactive checkmark values
     for m_col in milestone_columns:
         if m_col in working_df.columns:
             working_df[m_col] = working_df[m_col].astype(str).str.strip().str.upper().apply(
@@ -142,11 +155,11 @@ if not working_df.empty:
                 final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
                 
         success_rows_count = 0
-        columns_to_send = [c for c in working_df.columns if c != "Stage_Priority"]
+        columns_to_send = [c for c in working_df.columns if c not in ["Spreadsheet_Row_ID", "Stage_Priority"]]
         
         for idx_row, data_row in final_sync_df.iterrows():
             dict_payload = data_row.to_dict()
-            payload_ordered = {col: str(dict_payload.get(col, "")) for col in columns_to_send}
+            payload_ordered = {col: str(dict_payload.get(col, "")) for col in ["Spreadsheet_Row_ID"] + columns_to_send}
             try:
                 requests.post(PRODUCTION_WRITE_URL, data=json.dumps(payload_ordered), headers={"Content-Type": "application/json"})
                 success_rows_count += 1
@@ -157,4 +170,4 @@ if not working_df.empty:
         st.session_state.pop('ledger_fresh_data', None)
         st.rerun()
 else:
-    st.warning("⚠️ Access pipe open. Checking master row layout matrix bounds...")
+    st.warning("⚠️ Waiting on primary data fetch channels. Click 'Force Re-Sync' in sidebar if grid remains locked...")
