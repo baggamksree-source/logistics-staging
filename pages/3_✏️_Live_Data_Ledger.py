@@ -9,7 +9,7 @@ from utils import COLUMNS, STAGES
 st.set_page_config(page_title="Ledger Interface", layout="wide")
 
 st.title("✏️ Master Interactive Shipments Data Ledger")
-st.caption("Read pipeline: Hybrid Fail-Safe Sync Activated (Auto-Mapping Model).")
+st.caption("Read pipeline: Hybrid Fail-Safe Sync Activated (Unfiltered Slicing Model).")
 
 PRODUCTION_WRITE_URL = st.secrets["sheet_write_url"]
 RAW_READ_URL = st.secrets["sheet_read_url"]
@@ -22,7 +22,7 @@ milestone_columns = [
 ]
 
 def fetch_master_dataframe_direct():
-    # Pipeline Corridor: Direct Read Engine (Attempts fast download first)
+    # Attempt raw channel download path first
     try:
         clean_url = RAW_READ_URL
         if "/edit" in clean_url:
@@ -31,39 +31,35 @@ def fetch_master_dataframe_direct():
             clean_url = clean_url.rstrip('/') + "/export?format=csv&gid=0"
             
         sync_link = f"{clean_url}&ts={int(time.time() * 1000)}"
-        response = requests.get(sync_link, timeout=5)
+        response = requests.get(sync_link, timeout=6)
         
         if response.status_code == 200 and response.text.strip():
-            raw_text_lines = response.text.strip().split('\n')
-            if len(raw_text_lines) > 2:
-                data_body_csv = "\n".join(raw_text_lines[2:])
-                df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
-                return process_extracted_dataframe(df)
+            df = pd.read_csv(io.StringIO(response.text.strip()), header=None).fillna("")
+            if len(df) > 2:
+                # Discard rows 1 and 2 containing line wrapped text fragments
+                return process_extracted_dataframe(df.iloc[2:].reset_index(drop=True), start_row_offset=3)
     except:
         pass
 
-    # Backup Pipeline Corridor: AppsScript Stream Read Engine
+    # Deployment channel path fallback
     try:
         st.sidebar.warning("⚡ Primary channel locked. Deploying AppsScript fallback...")
         fallback_link = f"{PRODUCTION_WRITE_URL}?ts={int(time.time() * 1000)}"
         response = requests.get(fallback_link, timeout=15)
         
         if response.status_code == 200 and response.text.strip():
-            raw_text_lines = response.text.strip().split('\n')
-            if len(raw_text_lines) > 1:
-                data_body_csv = "\n".join(raw_text_lines[1:])
-                df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
-                return process_extracted_dataframe(df)
+            df = pd.read_csv(io.StringIO(response.text.strip()), header=None).fillna("")
+            if len(df) > 2:
+                return process_extracted_dataframe(df.iloc[2:].reset_index(drop=True), start_row_offset=3)
     except Exception as e:
         st.sidebar.error(f"All database connection channels exhausted: {e}")
         
     return pd.DataFrame()
 
-def process_extracted_dataframe(raw_df):
+def process_extracted_dataframe(raw_df, start_row_offset):
     columns_pool = list(COLUMNS)
     current_data_cols_count = len(raw_df.columns)
     
-    # Dynamic header count map adapter
     if current_data_cols_count < len(columns_pool):
         columns_pool = columns_pool[:current_data_cols_count]
     elif current_data_cols_count > len(columns_pool):
@@ -73,10 +69,9 @@ def process_extracted_dataframe(raw_df):
     raw_df.columns = columns_pool
     df_processed = raw_df.copy()
     
-    # Calculate physical sheet row positions accurately
-    df_processed["Spreadsheet_Row_ID"] = [str(i + 3) for i in range(len(df_processed))]
+    # Track spreadsheet physical row index offsets accurately 
+    df_processed["Spreadsheet_Row_ID"] = [str(i + start_row_offset) for i in range(len(df_processed))]
     
-    # Safely find the routing stage column without failing
     category_col = None
     for col in df_processed.columns:
         if str(col).lower().strip() == "category":
@@ -84,18 +79,17 @@ def process_extracted_dataframe(raw_df):
             break
             
     if category_col:
-        df_processed["Category_Cleaned"] = df_processed[category_col].astype(str).str.strip()
-        df_processed["Stage_Priority"] = df_processed["Category_Cleaned"].map({
+        df_processed[category_col] = df_processed[category_col].astype(str).str.strip()
+        df_processed["Stage_Priority"] = df_processed[category_col].map({
             "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
             "Released": 4, "Empty container returned": 5
         }).fillna(6)
         df_processed = df_processed.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
-        df_processed = df_processed.drop(columns=["Category_Cleaned", "Stage_Priority"], errors="ignore")
+        df_processed = df_processed.drop(columns=["Stage_Priority"], errors="ignore")
         
     final_cols_order = ["Spreadsheet_Row_ID"] + [c for c in df_processed.columns if c != "Spreadsheet_Row_ID"]
     return df_processed[final_cols_order]
 
-# Dynamic Session Cache Core
 if 'ledger_fresh_data' not in st.session_state or st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.ledger_fresh_data = fetch_master_dataframe_direct()
 
@@ -111,8 +105,6 @@ if not working_df.empty:
     grid_configuration = {
         "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
     }
-    
-    # Automatically scan columns and assign checkbox selectors to milestones
     for col in working_df.columns:
         if col in milestone_columns:
             grid_configuration[col] = st.column_config.CheckboxColumn(col, default=False)
@@ -140,9 +132,9 @@ if not working_df.empty:
                 success_rows_count += 1
             except:
                 pass
-        st.success(f"✓ Success! Grid variations synchronized live. ({success_rows_count} items matched).")
+        st.success(f"✓ Success! Data synchronized live ({success_rows_count} entries verified).")
         time.sleep(1)
         st.session_state.pop('ledger_fresh_data', None)
         st.rerun()
 else:
-    st.warning("⚠️ Formatting grid structure mapping... Please click the 'Force Re-Sync' button in the sidebar.")
+    st.warning("⚠️ Ready for mapping pipeline initialization. Please click the 'Discard Changes & Force Re-Sync' button on your sidebar dashboard.")
