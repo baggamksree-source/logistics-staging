@@ -14,7 +14,6 @@ st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed
 
 PRODUCTION_URL = st.secrets["sheet_write_url"]
 
-# SYNCHRONIZED: The 13 operational milestones mapped to your checkboxes layout
 milestone_columns = [
     "SO", "Empty container pickup", "Laden containers gatein", "SOB", 
     "Draft BL Checking and Approval", "Pre-alert documents", "Remittance", 
@@ -22,10 +21,11 @@ milestone_columns = [
     "Empty containers return"
 ]
 
+# FORCED LIVE SYNC: Bypasses Streamlit's network cache by attaching a rolling epoch timestamp micro-token
 def fetch_master_dataframe():
     try:
-        sync_link = f"{PRODUCTION_URL}?ts={int(time.time())}"
-        response = requests.get(sync_link, timeout=15)
+        sync_link = f"{PRODUCTION_URL}?ts={int(time.time() * 1000)}"
+        response = requests.get(sync_link, timeout=20)
         
         if response.status_code != 200 or not response.text.strip():
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
@@ -37,17 +37,15 @@ def fetch_master_dataframe():
         if len(all_parsed_rows) <= 1:
             return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
             
-        # Parse out extracted headers safely dynamically aligned with sheet size
         extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
         data_body_rows = all_parsed_rows[1:]
         
-        # Build layout explicitly matching Google's data array length
         df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
         df.columns = df.columns.astype(str).str.strip()
         
+        # Calculate dynamic physical spreadsheet row IDs matching index maps
         df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
         
-        # Backfill any missing arrays from the core columns definition layout
         for col in COLUMNS:
             if col not in df.columns: 
                 df[col] = ""
@@ -63,12 +61,10 @@ def fetch_master_dataframe():
         st.sidebar.error(f"Sync Issue: {e}")
         return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
 
-if "editable_ledger_df" not in st.session_state:
-    st.session_state.editable_ledger_df = fetch_master_dataframe()
+# ALWAYS fetch fresh data on every page execution loop execution pass
+st.session_state.editable_ledger_df = fetch_master_dataframe()
 
 if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
-    if "editable_ledger_df" in st.session_state: 
-        del st.session_state.editable_ledger_df
     st.session_state.editable_ledger_df = fetch_master_dataframe()
     st.rerun()
 
@@ -85,7 +81,6 @@ tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid V
 
 raw_working_data = st.session_state.editable_ledger_df.copy()
 
-# Render checkboxes safely checking against text dates or status fields cleanly
 for m_col in milestone_columns:
     if m_col in raw_working_data.columns:
         raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(
@@ -101,7 +96,7 @@ for m_col in milestone_columns:
 
 def render_interactive_grid(df_dataset, dynamic_key_suffix):
     styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
-    return st.data_editor(styled_df, use_container_width=True, hide_index=True, num_rows="fixed", column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}")
+    return st.data_editor(styled_df, use_container_width=True, hide_index=True, column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}")
 
 with tab_master:
     st.markdown("🟢 **Master Consolidated Queue Line**")
@@ -136,6 +131,4 @@ if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_co
             except:
                 pass
     st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified).")
-    if "editable_ledger_df" in st.session_state: 
-        del st.session_state["editable_ledger_df"]
     st.rerun()
