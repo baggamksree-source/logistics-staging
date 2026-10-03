@@ -23,7 +23,7 @@ milestone_columns = [
 ]
 
 def fetch_master_dataframe_direct():
-    # 🚀 PRIMARY PIPELINE: High-Speed Direct CSV Stream
+    # Corridor A: Direct Link Attempt
     try:
         clean_url = RAW_READ_URL
         if "/edit" in clean_url:
@@ -32,29 +32,30 @@ def fetch_master_dataframe_direct():
             clean_url = clean_url.rstrip('/') + "/export?format=csv&gid=0"
             
         sync_link = f"{clean_url}&ts={int(time.time() * 1000)}"
-        response = requests.get(sync_link, timeout=8)
+        response = requests.get(sync_link, timeout=6)
         
         if response.status_code == 200 and response.text.strip():
             raw_text_lines = response.text.strip().split('\n')
             if len(raw_text_lines) > 2:
                 data_body_csv = "\n".join(raw_text_lines[2:])
                 df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
-                return process_extracted_dataframe(df)
-    except Exception as e:
+                return process_extracted_dataframe(df, is_fallback=False)
+    except:
         pass
 
-    # 🔄 BACKUP PIPELINE: AppsScript Engine Fetcher (Triggers if primary connection times out)
+    # Corridor B: AppsScript Fallback Extraction Corridor
     try:
         st.sidebar.warning("⚡ Primary channel locked. Deploying AppsScript fallback...")
         fallback_link = f"{PRODUCTION_WRITE_URL}?ts={int(time.time() * 1000)}"
         response = requests.get(fallback_link, timeout=15)
         
         if response.status_code == 200 and response.text.strip():
-            raw_text_stream = io.StringIO(response.text.strip())
-            csv_reader = csv.reader(raw_text_stream)
-            all_rows = list(csv_reader)
-            if len(all_rows) > 1:
-                df = pd.DataFrame(all_rows[1:], columns=[str(h).strip() for h in all_rows[0]]).fillna("")
+            # Standardize raw response streams directly into array sets
+            raw_text_lines = response.text.strip().split('\n')
+            if len(raw_text_lines) > 1:
+                # Read structural blocks bypassing header names dynamically
+                data_body_csv = "\n".join(raw_text_lines[1:])
+                df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
                 return process_extracted_dataframe(df, is_fallback=True)
     except Exception as e:
         st.sidebar.error(f"All database connection channels exhausted: {e}")
@@ -65,27 +66,25 @@ def process_extracted_dataframe(raw_df, is_fallback=False):
     columns_pool = list(COLUMNS)
     current_data_cols_count = len(raw_df.columns)
     
-    if is_fallback:
-        # AppsScript already returns clean matching headers
-        df_processed = raw_df.copy()
-    else:
-        # Standardize direct export array maps
-        if current_data_cols_count < len(columns_pool):
-            columns_pool = columns_pool[:current_data_cols_count]
-        elif current_data_cols_count > len(columns_pool):
-            for diff in range(current_data_cols_count - len(columns_pool)):
-                columns_pool.append(f"Legacy_Field_{diff+1}")
-        raw_df.columns = columns_pool
-        df_processed = raw_df.copy()
-        
-    if "Category" not in df_processed.columns:
-        return pd.DataFrame()
-        
-    # Standardize Row ID maps cleanly across double headers
-    row_offset = 2 if is_fallback else 3
-    df_processed["Spreadsheet_Row_ID"] = [str(i + row_offset) for i in range(len(df_processed))]
-    df_processed["Category"] = df_processed["Category"].astype(str).str.strip()
+    # Auto-align target column sizing index matrices safely
+    if current_data_cols_count < len(columns_pool):
+        columns_pool = columns_pool[:current_data_cols_count]
+    elif current_data_cols_count > len(columns_pool):
+        for diff in range(current_data_cols_count - len(columns_pool)):
+            columns_pool.append(f"Legacy_Field_{diff+1}")
+            
+    raw_df.columns = columns_pool
+    df_processed = raw_df.copy()
     
+    # Calculate physical spreadsheet row mappings based on alignment offsets
+    row_offset = 3 if is_fallback else 3
+    df_processed["Spreadsheet_Row_ID"] = [str(i + row_offset) for i in range(len(df_processed))]
+    
+    if "Category" in df_processed.columns:
+        df_processed["Category"] = df_processed["Category"].astype(str).str.strip()
+    else:
+        df_processed["Category"] = "Yet to sail"
+        
     df_processed["Stage_Priority"] = df_processed["Category"].map({
         "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
         "Released": 4, "Empty container returned": 5
@@ -95,7 +94,7 @@ def process_extracted_dataframe(raw_df, is_fallback=False):
     final_cols_order = ["Spreadsheet_Row_ID"] + [c for c in df_processed.columns if c not in ["Spreadsheet_Row_ID", "Stage_Priority"]]
     return df_processed[final_cols_order]
 
-# Dynamic UI Loader Engine
+# Global cache execution block
 if 'ledger_fresh_data' not in st.session_state or st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
     st.session_state.ledger_fresh_data = fetch_master_dataframe_direct()
 
@@ -170,4 +169,4 @@ if not working_df.empty:
         st.session_state.pop('ledger_fresh_data', None)
         st.rerun()
 else:
-    st.warning("⚠️ Waiting on primary data fetch channels. Click 'Force Re-Sync' in sidebar if grid remains locked...")
+    st.warning("⚠️ Access pipe open. Compiling structural data indices...")
