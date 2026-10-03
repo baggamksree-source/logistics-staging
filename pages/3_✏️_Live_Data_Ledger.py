@@ -4,15 +4,15 @@ import requests
 import json
 import time
 import io
-import csv
 from utils import COLUMNS, STAGES
 
 st.set_page_config(page_title="Ledger Interface", layout="wide")
 
 st.title("✏️ Master Interactive Shipments Data Ledger")
-st.caption("Records are fully sorted: 'Yet to sail' sits locked on top, followed immediately by 'On water' items.")
+st.caption("Read pipeline: Auto-healing column index data mapping enabled.")
 
-PRODUCTION_URL = st.secrets["sheet_write_url"]
+PRODUCTION_WRITE_URL = st.secrets["sheet_write_url"]
+RAW_READ_URL = st.secrets["sheet_read_url"]
 
 milestone_columns = [
     "SO", "Empty container pickup", "Laden containers gatein", "SOB", 
@@ -21,55 +21,74 @@ milestone_columns = [
     "Empty containers return"
 ]
 
-# FORCED LIVE SYNC: Bypasses Streamlit's network cache by attaching a rolling epoch timestamp micro-token
-def fetch_master_dataframe():
+def fetch_master_dataframe_direct():
     try:
-        sync_link = f"{PRODUCTION_URL}?ts={int(time.time() * 1000)}"
-        response = requests.get(sync_link, timeout=20)
+        # Split share link and convert to a direct export download pipeline
+        base_url = RAW_READ_URL.split('/edit')
+        csv_download_pipe = f"{base_url[0]}/export?format=csv&gid=0&ts={int(time.time() * 1000)}"
+        
+        response = requests.get(csv_download_pipe, timeout=15)
         
         if response.status_code != 200 or not response.text.strip():
-            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
+            st.sidebar.error("Could not retrieve a valid data stream from the cloud storage engine.")
+            return pd.DataFrame()
             
-        raw_text_stream = io.StringIO(response.text.strip())
-        csv_reader_engine = csv.reader(raw_text_stream)
-        all_parsed_rows = list(csv_reader_engine)
-        
-        if len(all_parsed_rows) <= 1:
-            return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
+        # Read the raw sheet data line-by-line to properly parse the double-wrapped header row layout
+        raw_text_lines = response.text.strip().split('\n')
+        if len(raw_text_lines) <= 2:
+            return pd.DataFrame()
             
-        extracted_headers = [str(h).strip() for h in all_parsed_rows[0]]
-        data_body_rows = all_parsed_rows[1:]
+        # DYNAMIC MATCHING ENGINE: Safely extract rows 3 onwards, skipping the broken headers entirely
+        data_body_csv = "\n".join(raw_text_lines[2:])
+        raw_df = pd.read_csv(io.StringIO(data_body_csv), header=None).fillna("")
         
-        df = pd.DataFrame(data_body_rows, columns=extracted_headers).fillna("")
-        df.columns = df.columns.astype(str).str.strip()
+        # Clip columns array length definitions dynamically to match structural counts
+        columns_pool = list(COLUMNS)
+        current_data_cols_count = len(raw_df.columns)
         
-        # Calculate dynamic physical spreadsheet row IDs matching index maps
-        df["Spreadsheet_Row_ID"] = [str(i + 2) for i in range(len(df))]
-        
-        for col in COLUMNS:
-            if col not in df.columns: 
-                df[col] = ""
+        if current_data_cols_count < len(columns_pool):
+            columns_pool = columns_pool[:current_data_cols_count]
+        elif current_data_cols_count > len(columns_pool):
+            # Pad array boundaries if the sheet contains extra legacy rows
+            for diff in range(current_data_cols_count - len(columns_pool)):
+                columns_pool.append(f"Legacy_Field_{diff+1}")
                 
-        df["Stage_Priority"] = df["Category"].map({
+        raw_df.columns = columns_pool
+        
+        # Clean up key index matching structures to align maps cleanly
+        if "Category" not in raw_df.columns:
+            st.error("Header Alignment Warning: Could not locate 'Category' phase tracking column.")
+            return pd.DataFrame()
+            
+        # Reconstruct actual physical spreadsheet row IDs matching index maps
+        raw_df["Spreadsheet_Row_ID"] = [str(i + 3) for i in range(len(raw_df))]
+        
+        # Strip invisible text spaces from data parameters
+        raw_df["Category"] = raw_df["Category"].astype(str).str.strip()
+        
+        raw_df["Stage_Priority"] = raw_df["Category"].map({
             "Yet to sail": 1, "On water": 2, "Reached shore yet to release": 3,
             "Released": 4, "Empty container returned": 5
         }).fillna(6)
         
-        df = df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
-        return df[["Spreadsheet_Row_ID"] + COLUMNS]
+        raw_df = raw_df.sort_values(by=["Stage_Priority", "Spreadsheet_Row_ID"], ascending=[True, True])
+        
+        final_cols_order = ["Spreadsheet_Row_ID"] + [c for c in columns_pool if c != "Spreadsheet_Row_ID"]
+        return raw_df[final_cols_order]
     except Exception as e:
-        st.sidebar.error(f"Sync Issue: {e}")
-        return pd.DataFrame(columns=["Spreadsheet_Row_ID"] + COLUMNS)
+        st.sidebar.error(f"Extraction Pipeline Interruption: {e}")
+        return pd.DataFrame()
 
-# ALWAYS fetch fresh data on every page execution loop execution pass
-st.session_state.editable_ledger_df = fetch_master_dataframe()
+# Inject fresh dataset rows values instantly
+if 'ledger_fresh_data' not in st.session_state or st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
+    st.session_state.ledger_fresh_data = fetch_master_dataframe_direct()
+    if not st.session_state.ledger_fresh_data.empty:
+        st.toast("Database tables updated live!", icon="⚡")
 
-if st.sidebar.button("🔄 Discard Changes & Force Re-Sync"):
-    st.session_state.editable_ledger_df = fetch_master_dataframe()
-    st.rerun()
+working_df = st.session_state.ledger_fresh_data.copy()
 
 def apply_phase_color_rows(row):
-    phase = str(row["Category"]).strip()
+    phase = str(row.get("Category", "")).strip()
     if phase == "Yet to sail": return ["background-color: #FFFFFF; color: #000000"] * len(row)
     elif phase == "On water": return ["background-color: #E2F0D9; color: #385723"] * len(row)
     elif phase == "Reached shore yet to release": return ["background-color: #DDEBF7; color: #1F4E78"] * len(row)
@@ -77,58 +96,65 @@ def apply_phase_color_rows(row):
     elif phase == "Empty container returned": return ["background-color: #E1F5FE; color: #01579B"] * len(row)
     return [""] * len(row)
 
-tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid View", "⛵ Yet to Sail Only", "🌊 On Water Active", "⚓ Reached Shore / Released"])
-
-raw_working_data = st.session_state.editable_ledger_df.copy()
-
-for m_col in milestone_columns:
-    if m_col in raw_working_data.columns:
-        raw_working_data[m_col] = raw_working_data[m_col].astype(str).str.strip().str.upper().apply(
-            lambda x: True if x in ["YES", "TRUE", "DONE"] else False
-        )
-
-grid_configuration = {
-    "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
-    "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
-}
-for m_col in milestone_columns:
-    grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
-
-def render_interactive_grid(df_dataset, dynamic_key_suffix):
-    styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
-    return st.data_editor(styled_df, use_container_width=True, hide_index=True, column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}")
-
-with tab_master:
-    st.markdown("🟢 **Master Consolidated Queue Line**")
-    edited_output = render_interactive_grid(raw_working_data, "master_view")
-
-with tab_yts:
-    st.markdown("⛵ **Isolated View: Unshipped Freight Bookings**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "Yet to sail"], "yet_to_sail_view")
-
-with tab_ow:
-    st.markdown("🌊 **Isolated View: Active High Sea Transits**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"] == "On water"], "on_water_view")
-
-with tab_rs:
-    st.markdown("⚓ **Isolated View: Arrived / Cargo Delivered Records**")
-    render_interactive_grid(raw_working_data[raw_working_data["Category"].isin(["Reached shore yet to release", "Released", "Empty container returned"])], "shore_released_view")
-
-st.markdown("---")
-if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
-    final_sync_df = edited_output.copy()
+if not working_df.empty:
+    # Process milestone string flags into valid Streamlit interactive checkmark values
     for m_col in milestone_columns:
-        final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
+        if m_col in working_df.columns:
+            working_df[m_col] = working_df[m_col].astype(str).str.strip().str.upper().apply(
+                lambda x: True if x in ["YES", "TRUE", "DONE"] else False
+            )
+            
+    grid_configuration = {
+        "Spreadsheet_Row_ID": st.column_config.TextColumn("Row ID", disabled=True),
+        "Category": st.column_config.SelectboxColumn("Stage Phase", options=STAGES, required=True),
+    }
+    for m_col in milestone_columns:
+        if m_col in working_df.columns:
+            grid_configuration[m_col] = st.column_config.CheckboxColumn(m_col, default=False)
+            
+    def render_interactive_grid(df_dataset, dynamic_key_suffix):
+        styled_df = df_dataset.style.apply(apply_phase_color_rows, axis=1)
+        return st.data_editor(styled_df, use_container_width=True, hide_index=True, column_config=grid_configuration, key=f"data_ledger_grid_{dynamic_key_suffix}")
         
-    success_rows_count = 0
-    if not final_sync_df.empty:
+    tab_master, tab_yts, tab_ow, tab_rs = st.tabs(["📊 All Sorted Shipments Grid View", "⛵ Yet to Sail Only", "🌊 On Water Active", "⚓ Reached Shore / Released"])
+    
+    with tab_master:
+        st.markdown("🟢 **Master Consolidated Queue Line**")
+        edited_output = render_interactive_grid(working_df, "master_view")
+        
+    with tab_yts:
+        st.markdown("⛵ **Isolated View: Unshipped Freight Bookings**")
+        render_interactive_grid(working_df[working_df["Category"] == "Yet to sail"], "yet_to_sail_view")
+        
+    with tab_ow:
+        st.markdown("🌊 **Isolated View: Active High Sea Transits**")
+        render_interactive_grid(working_df[working_df["Category"] == "On water"], "on_water_view")
+        
+    with tab_rs:
+        st.markdown("⚓ **Isolated View: Arrived / Cargo Delivered Records**")
+        render_interactive_grid(working_df[working_df["Category"].isin(["Reached shore yet to release", "Released", "Empty container returned"])], "shore_released_view")
+        
+    st.markdown("---")
+    if st.button("💾 Push Grid Edits Live to Cloud Sheets", type="primary", use_container_width=True):
+        final_sync_df = edited_output.copy()
+        for m_col in milestone_columns:
+            if m_col in final_sync_df.columns:
+                final_sync_df[m_col] = final_sync_df[m_col].map({True: "Yes", False: "No"}).fillna("No")
+                
+        success_rows_count = 0
+        columns_to_send = [c for c in working_df.columns if c != "Stage_Priority"]
+        
         for idx_row, data_row in final_sync_df.iterrows():
             dict_payload = data_row.to_dict()
-            payload_ordered = {col: str(dict_payload.get(col, "")) for col in ["Spreadsheet_Row_ID"] + COLUMNS}
+            payload_ordered = {col: str(dict_payload.get(col, "")) for col in columns_to_send}
             try:
-                requests.post(PRODUCTION_URL, data=json.dumps(payload_ordered), headers={"Content-Type": "application/json"})
+                requests.post(PRODUCTION_WRITE_URL, data=json.dumps(payload_ordered), headers={"Content-Type": "application/json"})
                 success_rows_count += 1
             except:
                 pass
-    st.success(f"✓ Success! Synchronized matrix array processed. ({success_rows_count} entries verified).")
-    st.rerun()
+        st.success(f"✓ Success! Grid variations synchronized live. ({success_rows_count} items matched).")
+        time.sleep(1)
+        st.session_state.pop('ledger_fresh_data', None)
+        st.rerun()
+else:
+    st.warning("⚠️ Access pipe open. Checking master row layout matrix bounds...")
